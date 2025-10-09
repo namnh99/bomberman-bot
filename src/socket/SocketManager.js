@@ -26,8 +26,6 @@ class SocketManager {
 
     this.socket.on("connect", () => {
       console.log("✅ Connected as:", this.socket.id);
-      this.emit("join", {}); // Gửi join ngay khi kết nối
-      console.log("🚀 Sent join event");
     });
 
     this.socket.on("disconnect", (reason) => {

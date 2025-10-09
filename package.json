@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon --watch src/index.js",
-    "debug": "node --inspect-brk src/index.js"
+    "dev": "node --watch src/index.js",
+    "debug": "node --inspect-brk --watch src/index.js"
   },
   "author": "",
   "license": "ISC",
