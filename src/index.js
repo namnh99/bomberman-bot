@@ -6,6 +6,7 @@ const socket = socketManager.getSocket();
 let currentState = null;
 let myUid = null;
 let direction = null;
+let moveIntervalId = null; // Store interval ID for interruption
 
 const BEAM_WIDTH = 8;
 const DEPTH = 6;
@@ -35,34 +36,57 @@ const smoothMove = (direction) => {
   const me = currentState.bombers.find((b) => b.uid === myUid);
   if (!me) return;
 
-  const intervalId = setInterval(() => {
-    if (i < max) {
+  moveIntervalId = setInterval(() => {
+    if (i <= max + 1) {
       move(direction);
       i++;
     } else {
-      clearInterval(intervalId);
+      clearInterval(moveIntervalId);
       isMoving = false;
+      makeDecision();
       i = 0;
     }
   }, 20);
 };
 
 socket.on("player_move", (data) => {
-  if (!currentState || isMoving) return;
+  if (!currentState) return;
 
   const bomberIndex = currentState.bombers.findIndex((b) => b.uid === data.uid);
-  if (bomberIndex !== -1) {
-    currentState.bombers[bomberIndex] = data;
-  }
+  if (bomberIndex !== -1) currentState.bombers[bomberIndex] = data;
 
-  if (data.uid === myUid) makeDecision(direction);
+  if (data.uid === myUid && !isMoving) {
+    // makeDecision();
+  }
+});
+
+socket.on("new_bomb", (bomb) => {
+  if (!currentState) return;
+  // console.log("🔥 New bomb on map:", bomb);
+  currentState.bombs.push(bomb);
+  makeDecision();
+});
+
+socket.on("bomb_explode", (bomb) => {
+  if (!currentState) return;
+  // console.log("💥 Bomb exploded:", bomb);
+  const bombIndex = currentState.bombs.findIndex((b) => b.id === bomb.id);
+  if (bombIndex !== -1) currentState.bombs[bombIndex] = bomb;
+  makeDecision();
+});
+
+socket.on("map_update", (data) => {
+  if (!currentState) return;
+  // console.log("💥 Bomb exploded:", data);
+  currentState = { ...currentState, ...data };
+  makeDecision();
 });
 
 // ==================== ACTION HELPERS ====================
 function move(direction) {
   socket.emit("move", { orient: direction });
   const me = currentState.bombers.find((b) => b.uid === myUid);
-  if (me) me.orient = direction; // cập nhật orient
+  if (me) me.orient = direction; // update orient
 }
 
 function placeBomb() {
@@ -75,12 +99,8 @@ function makeDecision() {
   if (!currentState || !myUid || isMoving) return;
 
   try {
-    const { action } = decideNextAction(currentState, myUid, {
-      beamWidth: BEAM_WIDTH,
-      depth: DEPTH,
-    });
-
-    console.log("trigger", action);
+    const decision = decideNextAction(currentState, myUid);
+    const { action } = decision;
 
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(action)) {
       smoothMove(action);
