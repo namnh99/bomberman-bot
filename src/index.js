@@ -130,27 +130,29 @@ function makeDecision() {
   const myBomber = currentState.bombers.find((b) => b.uid === myUid);
   if (!myBomber) return;
 
-  const isAligned =
-    myBomber.x % STEP_COUNT === 0 && myBomber.y % STEP_COUNT === 0;
-  if (!isAligned) {
-    let moveLeftoverX = myBomber.x % STEP_COUNT;
-    let moveLeftoverY = myBomber.y % STEP_COUNT;
-    if (moveLeftoverX !== 0) {
-      console.log("Correcting Y alignment:", moveLeftoverY);
-      const direction = moveLeftoverX > STEP_COUNT / 2 ? "RIGHT" : "LEFT";
-      while (moveLeftoverX !== 0) {
+  let moveOver;
+  let direction;
+  // Align to grid if not already aligned
+  if (myBomber.orient === "UP" || myBomber.orient === "DOWN") {
+    moveOver = myBomber.x % STEP_COUNT;
+    direction = moveOver > STEP_COUNT / 2 ? "RIGHT" : "LEFT";
+  } else if (myBomber.orient === "LEFT" || myBomber.orient === "RIGHT") {
+    moveOver = myBomber.y % STEP_COUNT;
+    direction = moveOver > STEP_COUNT / 2 ? "DOWN" : "UP";
+  }
+
+  if (moveOver !== 0) {
+    const interval = setInterval(() => {
+      if (moveOver > 0) {
         socket.emit("move", { orient: direction });
-        moveLeftoverX -= 1;
+        moveOver -= 1;
+      } else {
+        console.log(
+          "🟩 Clear aligned to grid ======================================================="
+        );
+        clearInterval(interval);
       }
-    } else if (moveLeftoverY !== 0) {
-      console.log("Correcting Y alignment:", moveLeftoverY);
-      const direction = moveLeftoverY > STEP_COUNT / 2 ? "DOWN" : "UP";
-      while (moveLeftoverY !== 0) {
-        socket.emit("move", { orient: direction });
-        moveLeftoverY -= 1;
-      }
-    }
-    return;
+    }, STEP_DELAY);
   }
 
   try {
