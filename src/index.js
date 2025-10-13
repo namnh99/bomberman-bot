@@ -112,7 +112,7 @@ socket.on("item_collected", (data) => {
 
 socket.on("map_update", (data) => {
   if (!currentState) return;
-  currentState.items.chests = data.chests;
+  currentState.chests = data.chests;
   currentState.items = data.items;
   // makeDecision(); // Re-evaluate decision after map update
 });
