@@ -1,3 +1,4 @@
+import "dotenv/config";
 import socketManager from "./socket/SocketManager.js";
 import { decideNextAction } from "./bot/bomberman_beam_agent.js";
 import { STEP_DELAY, STEP_COUNT } from "./constants/index.js";
@@ -138,14 +139,14 @@ function makeDecision() {
       console.log("Correcting Y alignment:", moveLeftoverY);
       const direction = moveLeftoverX > STEP_COUNT / 2 ? "RIGHT" : "LEFT";
       while (moveLeftoverX !== 0) {
-        socket.emit("move", { orient: direction }); // Ensure
+        socket.emit("move", { orient: direction });
         moveLeftoverX -= 1;
       }
     } else if (moveLeftoverY !== 0) {
       console.log("Correcting Y alignment:", moveLeftoverY);
       const direction = moveLeftoverY > STEP_COUNT / 2 ? "DOWN" : "UP";
       while (moveLeftoverY !== 0) {
-        socket.emit("move", { orient: direction }); // Ensure
+        socket.emit("move", { orient: direction });
         moveLeftoverY -= 1;
       }
     }
@@ -168,7 +169,7 @@ function makeDecision() {
         // Use a small delay to allow the bomb placement to register before moving
         setTimeout(() => {
           smoothMove(escapeAction);
-        }, 50);
+        }, 20);
       }
     }
   } catch (err) {

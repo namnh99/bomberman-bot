@@ -1,6 +1,4 @@
 import { io } from "socket.io-client";
-import { SERVER_URL, TOKEN } from "../constants/index.js";
-
 class SocketManager {
   static instance;
   socket = null;
@@ -8,13 +6,13 @@ class SocketManager {
   constructor() {
     if (SocketManager.instance) return SocketManager.instance;
     SocketManager.instance = this;
-    this.connect(SERVER_URL);
+    this.connect(process.env.SERVER_URL);
   }
 
   connect(url, options = {}) {
     if (!this.socket) {
       this.socket = io(url, {
-        auth: { token: TOKEN },
+        auth: { token: process.env.TOKEN },
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
