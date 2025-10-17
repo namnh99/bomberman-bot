@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "prettier": "^3.6.2",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {

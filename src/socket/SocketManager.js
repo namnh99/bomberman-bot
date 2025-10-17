@@ -20,10 +20,10 @@ class SocketManager {
       });
     }
 
-    console.log("🔌 Connecting to server:", url);
+    // console.log("🔌 Connecting to server:", url);
 
     this.socket.on("connect", () => {
-      console.log("✅ Connected as:", this.socket.id);
+      // console.log("✅ Connected as:", this.socket.id);
     });
 
     this.socket.on("disconnect", (reason) => {
@@ -31,7 +31,7 @@ class SocketManager {
     });
 
     this.socket.on("connect_error", (err) => {
-      console.error("⚠️ Connection error:", err.message);
+      // console.error("⚠️ Connection error:", err.message);
     });
 
     return this.socket;
