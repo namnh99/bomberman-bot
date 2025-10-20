@@ -307,20 +307,22 @@ const smoothMove = (direction, speed = 1, isEscapeMove = false) => {
     )}, ${Math.floor(currentY / STEP_COUNT)}]`,
   )
 
+
+
   // Calculate pixels to move based on direction
   switch (direction) {
     case "UP":
-      pixelsToMove = currentY % STEP_COUNT || STEP_COUNT
+      pixelsToMove = currentY % STEP_COUNT + STEP_COUNT
       break
     case "DOWN":
       pixelsToMove = STEP_COUNT - (currentY % STEP_COUNT)
       break
     case "LEFT":
-      pixelsToMove = currentX % STEP_COUNT || STEP_COUNT
+      pixelsToMove = currentX % STEP_COUNT + STEP_COUNT
       break
     case "RIGHT":
       pixelsToMove = STEP_COUNT - (currentX % STEP_COUNT)
-      break∆
+      break
   }
 
   let stepsNeeded = Math.ceil(pixelsToMove / speed)
