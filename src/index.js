@@ -12,8 +12,9 @@ let moveIntervalId = null
 let alignIntervalId = null
 let escapeMode = false
 let escapePath = []
-let manualMode = true // Toggle between manual and AI control
+let manualMode = false // Toggle between manual and AI control
 let useSmootMovesInManual = true // Use smooth moves in manual mode (false = single steps)
+let speed = 1
 
 // ==================== MANUAL CONTROL SETUP ====================
 
@@ -149,10 +150,10 @@ function setupManualControl() {
       if (useSmootMovesInManual) {
         // Use smooth movement (full grid cell)
         console.log(`   📏 Using smooth move (full cell)`)
-        smoothMove(action, myBomber.speed, false)
+        smoothMove(action, speed, false)
       } else {
         // Send direct single-step move command
-        console.log(`   � Sending single step: ${action}`)
+        console.log(`   👣 Sending single step: ${action}`)
         move(action)
       }
     }
@@ -181,6 +182,11 @@ socket.on("player_move", (data) => {
   const bomberIndex = currentState.bombers.findIndex((b) => b.uid === data.uid)
   if (bomberIndex !== -1) {
     currentState.bombers[bomberIndex] = data
+    // Update global speed when our bomber's speed changes
+    if (data.uid === myUid && data.speed) {
+      speed = data.speed
+      console.log(`⚡ Speed updated: ${speed}`)
+    }
     // Log position updates for debugging
     if (data.uid === myUid) {
       // console.log(
@@ -235,13 +241,13 @@ socket.on("chest_destroyed", (chest) => {
 
   if (chest.item?.type) {
     switch (chest.item.type) {
-      case "SPEED":
+      case "S":
         item = "S"
         break
-      case "EXPLOSION_RANGE":
+      case "R":
         item = "R"
         break
-      case "BOMB_COUNT":
+      case "B":
         item = "B"
         break
     }
@@ -258,6 +264,12 @@ socket.on("item_collected", (data) => {
   const itemX = Math.floor(data.item.x / STEP_COUNT)
   const itemY = Math.floor(data.item.y / STEP_COUNT)
   currentState.map[itemY][itemX] = null
+
+  if (data.bomber.uid === myUid && data.item.type === "S") {
+    speed += 1
+    console.log(`⚡ Speed increased: ${speed}`)
+  }
+
   // TODO: Could also update bomber's attributes if needed
   if (!manualMode) {
     makeDecision() // Re-evaluate decision after an item is collected
@@ -417,7 +429,7 @@ function makeDecision() {
       escapeMode = true
       escapePath = [...fullPath] // Copy the full path
       const firstMove = escapePath.shift() // Remove first move from queue
-      smoothMove(firstMove, myBomber.speed, true)
+      smoothMove(firstMove, speed, true)
       return
     }
 
@@ -476,10 +488,10 @@ function makeDecision() {
       // } else {
       //   // Already perfectly aligned, move directly
       //   console.log(`✅ Already aligned, moving: ${action}`);
-      //   smoothMove(action, myBomber.speed);
+      //   smoothMove(action, speed);
       // }
 
-      smoothMove(action, myBomber.speed)
+      smoothMove(action, speed)
     } else if (action === "BOMB") {
       console.log(`💣 Placing bomb`)
       placeBomb()
@@ -488,7 +500,7 @@ function makeDecision() {
         console.log(`🏃 Escaping: ${escapeAction}`)
         // Use a small delay to allow the bomb placement to register before moving
         setTimeout(() => {
-          smoothMove(escapeAction, myBomber.speed)
+          smoothMove(escapeAction, speed)
         }, STEP_DELAY)
       }
     } else if (action === "STAY") {
