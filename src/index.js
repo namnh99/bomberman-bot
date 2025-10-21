@@ -1,10 +1,11 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
 import { decideNextAction } from "./bot/bomberman_beam_agent.js"
-import { STEP_DELAY, STEP_COUNT } from "./constants/index.js"
+import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "./constants/index.js"
 import readline from "readline"
 
 const socket = socketManager.getSocket()
+const offset = (GRID_SIZE - BOT_SIZE) / 2
 
 let currentState = null
 let myUid = null
@@ -12,8 +13,8 @@ let moveIntervalId = null
 let alignIntervalId = null
 let escapeMode = false
 let escapePath = []
-let manualMode = false // Toggle between manual and AI control
-let useSmootMovesInManual = true // Use smooth moves in manual mode (false = single steps)
+let manualMode = false
+let useSmootMovesInManual = true
 let speed = 1
 
 // ==================== MANUAL CONTROL SETUP ====================
@@ -134,7 +135,7 @@ function setupManualControl() {
     if (action) {
       console.log(`\n🎮 Manual control: ${action}`)
       console.log(
-        `   Current: [${Math.floor(myBomber.x / STEP_COUNT)}, ${Math.floor(myBomber.y / STEP_COUNT)}] | Pixel: [${myBomber.x}, ${myBomber.y}]`,
+        `   Current: [${Math.floor(myBomber.x / GRID_SIZE)}, ${Math.floor(myBomber.y / GRID_SIZE)}] | Pixel: [${myBomber.x}, ${myBomber.y}]`,
       )
 
       // Cancel any ongoing AI movements
@@ -150,7 +151,7 @@ function setupManualControl() {
       if (useSmootMovesInManual) {
         // Use smooth movement (full grid cell)
         console.log(`   📏 Using smooth move (full cell)`)
-        smoothMove(action, speed, false)
+        smoothMove(action, false)
       } else {
         // Send direct single-step move command
         console.log(`   👣 Sending single step: ${action}`)
@@ -182,16 +183,11 @@ socket.on("player_move", (data) => {
   const bomberIndex = currentState.bombers.findIndex((b) => b.uid === data.uid)
   if (bomberIndex !== -1) {
     currentState.bombers[bomberIndex] = data
-    // Update global speed when our bomber's speed changes
-    if (data.uid === myUid && data.speed) {
-      speed = data.speed
-      console.log(`⚡ Speed updated: ${speed}`)
-    }
     // Log position updates for debugging
     if (data.uid === myUid) {
       // console.log(
-      //   `🔄 Position updated: [${Math.floor(data.x / STEP_COUNT)}, ${Math.floor(
-      //     data.y / STEP_COUNT
+      //   `🔄 Position updated: [${Math.floor(data.x / GRID_SIZE)}, ${Math.floor(
+      //     data.y / GRID_SIZE
       //   )}] | Pixel: [${data.x}, ${data.y}]`
       // );
     }
@@ -200,11 +196,11 @@ socket.on("player_move", (data) => {
 
 socket.on("new_bomb", (bomb) => {
   if (!currentState) return
-  const bommber = currentState.bombers.find((b) => b.uid === bomb.uid)
+  // const bommber = currentState.bombers.find((b) => b.uid === bomb.uid)
   // console.log(
-  //   `💣 New bomb placed at [${Math.floor(bomb.x / STEP_COUNT)}, ${Math.floor(
-  //     bomb.y / STEP_COUNT,
-  //   )}] | bomber: [${Math.floor(bommber?.x / STEP_COUNT)}, ${Math.floor(bommber?.y / STEP_COUNT)}]`,
+  //   `💣 New bomb placed at [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(
+  //     bomb.y / GRID_SIZE,
+  //   )}] | bomber: [${Math.floor(bommber?.x / GRID_SIZE)}, ${Math.floor(bommber?.y / GRID_SIZE)}]`,
   // )
   currentState.bombs.push(bomb)
   // console.log(`   � Total bombs in state: ${currentState.bombs.length}`);
@@ -216,8 +212,8 @@ socket.on("new_bomb", (bomb) => {
 socket.on("bomb_explode", (bomb) => {
   if (!currentState) return
   // console.log(
-  //   `💥 Bomb exploded at [${Math.floor(bomb.x / STEP_COUNT)}, ${Math.floor(
-  //     bomb.y / STEP_COUNT
+  //   `💥 Bomb exploded at [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(
+  //     bomb.y / GRID_SIZE
   //   )}] | id: ${bomb.id}`
   // );
   const bombIndex = currentState.bombs.findIndex((b) => b.id === bomb.id)
@@ -235,8 +231,8 @@ socket.on("bomb_explode", (bomb) => {
 
 socket.on("chest_destroyed", (chest) => {
   if (!currentState) return
-  const chestX = Math.floor(chest.x / STEP_COUNT)
-  const chestY = Math.floor(chest.y / STEP_COUNT)
+  const chestX = Math.floor(chest.x / GRID_SIZE)
+  const chestY = Math.floor(chest.y / GRID_SIZE)
   let item = null
 
   if (chest.item?.type) {
@@ -261,12 +257,13 @@ socket.on("chest_destroyed", (chest) => {
 
 socket.on("item_collected", (data) => {
   if (!currentState) return
-  const itemX = Math.floor(data.item.x / STEP_COUNT)
-  const itemY = Math.floor(data.item.y / STEP_COUNT)
+  const itemX = Math.floor(data.item.x / GRID_SIZE)
+  const itemY = Math.floor(data.item.y / GRID_SIZE)
   currentState.map[itemY][itemX] = null
 
-  if (data.bomber.uid === myUid && data.item.type === "S") {
-    speed += 1
+  if (data.bomber?.uid === myUid && data.item.type === "S") {
+    speed = data.bomber.speed + data.bomber.speedCount
+    if (speed > 3) speed = 3
     console.log(`⚡ Speed increased: ${speed}`)
   }
 
@@ -294,7 +291,7 @@ function placeBomb() {
   socket.emit("place_bomb", {})
 }
 
-const smoothMove = (direction, speed = 1, isEscapeMove = false) => {
+const smoothMove = (direction, isEscapeMove = false) => {
   // Clear any existing intervals before starting a new move
   if (moveIntervalId) {
     console.log(`⚠️  Canceling previous move to start new move: ${direction}`)
@@ -310,30 +307,28 @@ const smoothMove = (direction, speed = 1, isEscapeMove = false) => {
   const currentBomber = currentState.bombers.find((b) => b.uid === myUid)
   const currentX = currentBomber?.x
   const currentY = currentBomber?.y
-  let pixelsToMove = STEP_COUNT
+  let pixelsToMove = 0
   let i = 0
 
   console.log(
     `\n🏃 Smooth move requested: ${direction} Current Pixel: [${currentX}, ${currentY}] | grid: [${Math.floor(
-      currentX / STEP_COUNT,
-    )}, ${Math.floor(currentY / STEP_COUNT)}]`,
+      currentX / GRID_SIZE,
+    )}, ${Math.floor(currentY / GRID_SIZE)}]`,
   )
-
-
 
   // Calculate pixels to move based on direction
   switch (direction) {
     case "UP":
-      pixelsToMove = currentY % STEP_COUNT + STEP_COUNT
+      pixelsToMove = (currentY % GRID_SIZE) + GRID_SIZE - offset
       break
     case "DOWN":
-      pixelsToMove = STEP_COUNT - (currentY % STEP_COUNT)
+      pixelsToMove = GRID_SIZE - (currentY % GRID_SIZE) + offset
       break
     case "LEFT":
-      pixelsToMove = currentX % STEP_COUNT + STEP_COUNT
+      pixelsToMove = (currentX % GRID_SIZE) + GRID_SIZE - offset
       break
     case "RIGHT":
-      pixelsToMove = STEP_COUNT - (currentX % STEP_COUNT)
+      pixelsToMove = GRID_SIZE - (currentX % GRID_SIZE) + offset
       break
   }
 
@@ -358,7 +353,7 @@ const smoothMove = (direction, speed = 1, isEscapeMove = false) => {
       if (escapeMode && escapePath.length > 0) {
         const nextMove = escapePath.shift()
         console.log(`🏃 Continuing escape: ${nextMove} (${escapePath.length} pixels remaining)`)
-        smoothMove(nextMove, speed, true)
+        smoothMove(nextMove, true)
       } else {
         // Escape complete or normal move done
         // if (escapeMode) {
@@ -412,8 +407,8 @@ function makeDecision() {
   if (!myBomber) return
 
   console.log(
-    `\n📍 Position: [${Math.floor(myBomber.x / STEP_COUNT)}, ${Math.floor(
-      myBomber.y / STEP_COUNT,
+    `\n📍 Position: [${Math.floor(myBomber.x / GRID_SIZE)}, ${Math.floor(
+      myBomber.y / GRID_SIZE,
     )}] | Pixel: [${myBomber.x}, ${myBomber.y}] | Orient: ${myBomber.orient}`,
   )
 
@@ -429,69 +424,68 @@ function makeDecision() {
       escapeMode = true
       escapePath = [...fullPath] // Copy the full path
       const firstMove = escapePath.shift() // Remove first move from queue
-      smoothMove(firstMove, speed, true)
+      smoothMove(firstMove, true)
       return
     }
 
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(action)) {
       // Align to grid if not already aligned before moving
-      // let moveOver = 0;
-      // let alignDirection = null;
+      let moveOver = 0
+      let alignDirection = null
 
-      // if (action === "UP" || action === "DOWN") {
-      //   moveOver = myBomber.x % STEP_COUNT;
-      //   if (moveOver !== 0) {
-      //     // Choose shortest path to align
-      //     if (moveOver > STEP_COUNT / 2) {
-      //       alignDirection = "RIGHT";
-      //       moveOver = STEP_COUNT - moveOver;
-      //     } else {
-      //       alignDirection = "LEFT";
-      //     }
-      //   }
-      // } else if (action === "LEFT" || action === "RIGHT") {
-      //   moveOver = myBomber.y % STEP_COUNT;
-      //   if (moveOver !== 0) {
-      //     // Choose shortest path to align
-      //     if (moveOver > STEP_COUNT / 2) {
-      //       alignDirection = "DOWN";
-      //       moveOver = STEP_COUNT - moveOver;
-      //     } else {
-      //       alignDirection = "UP";
-      //     }
-      //   }
-      // }
+      if (action === "UP" || action === "DOWN") {
+        moveOver = myBomber.x % GRID_SIZE
+        if (moveOver !== 0) {
+          // Choose shortest path to align
+          if (moveOver > GRID_SIZE / 2) {
+            alignDirection = "RIGHT"
+            moveOver = GRID_SIZE - moveOver
+          } else {
+            alignDirection = "LEFT"
+          }
+        }
+      } else if (action === "LEFT" || action === "RIGHT") {
+        moveOver = myBomber.y % GRID_SIZE
+        if (moveOver !== 0) {
+          // Choose shortest path to align
+          if (moveOver > GRID_SIZE / 2) {
+            alignDirection = "DOWN"
+            moveOver = GRID_SIZE - moveOver
+          } else {
+            alignDirection = "UP"
+          }
+        }
+      }
 
-      // // Execute alignment before main move
-      // // Note: Always align when moving perpendicular, even if misalignment is small
-      // // The server may reject movement if not properly aligned
+      // Execute alignment before main move
+      // Note: Always align when moving perpendicular, even if misalignment is small
+      // The server may reject movement if not properly aligned
       // if (moveOver > 0 && alignDirection) {
       //   // Calculate alignment steps based on speed
-      //   const alignSteps = Math.ceil(moveOver / myBomber.speed);
-      //   let stepsLeft = alignSteps;
+      //   const alignSteps = Math.ceil(moveOver / myBomber.speed)
+      //   let stepsLeft = alignSteps
       //   console.log(
-      //     `🔧 Aligning ${alignDirection} (${moveOver}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${action}`
-      //   );
+      //     `🔧 Aligning ${alignDirection} (${moveOver}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${action}`,
+      //   )
 
       //   alignIntervalId = setInterval(() => {
       //     if (stepsLeft > 0) {
-      //       socket.emit("move", { orient: alignDirection });
-      //       stepsLeft--;
+      //       socket.emit("move", { orient: alignDirection })
+      //       stepsLeft--
       //     } else {
-      //       clearInterval(alignIntervalId);
-      //       alignIntervalId = null;
-      //       console.log(`✅ Alignment complete, starting move: ${action}`);
+      //       clearInterval(alignIntervalId)
+      //       alignIntervalId = null
+      //       console.log(`✅ Alignment complete, starting move: ${action}`)
       //       // Start main move after alignment
-      //       smoothMove(action, myBomber.speed);
+      //       smoothMove(action)
       //     }
-      //   }, STEP_DELAY);
+      //   }, STEP_DELAY)
       // } else {
       //   // Already perfectly aligned, move directly
-      //   console.log(`✅ Already aligned, moving: ${action}`);
-      //   smoothMove(action, speed);
+      //   console.log(`✅ Already aligned, moving: ${action}`)
+      //   smoothMove(action)
       // }
-
-      smoothMove(action, speed)
+      smoothMove(action)
     } else if (action === "BOMB") {
       console.log(`💣 Placing bomb`)
       placeBomb()
@@ -500,7 +494,7 @@ function makeDecision() {
         console.log(`🏃 Escaping: ${escapeAction}`)
         // Use a small delay to allow the bomb placement to register before moving
         setTimeout(() => {
-          smoothMove(escapeAction, speed)
+          smoothMove(escapeAction)
         }, STEP_DELAY)
       }
     } else if (action === "STAY") {

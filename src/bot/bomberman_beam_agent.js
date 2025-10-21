@@ -1,7 +1,7 @@
 // bomberman_chest_bomb_agent.js
 // Run: const { decideNextAction } = require('./bomberman_chest_bomb_agent');
 
-import { STEP_COUNT } from "../constants/index.js"
+import { GRID_SIZE } from "../constants/index.js"
 
 const DIRS = [
   [0, -1, "UP"],
@@ -87,8 +87,8 @@ function findBestPath(map, start, targets, bombs, allBombers, myBomber, isEscapi
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner ? owner.explosionRange : 2
 
-    const gridBombX = Math.floor(bomb.x / STEP_COUNT)
-    const gridBombY = Math.floor(bomb.y / STEP_COUNT)
+    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
 
     unsafeTiles.add(`${gridBombX},${gridBombY}`)
     for (const [dx, dy] of DIRS) {
@@ -170,8 +170,8 @@ function findShortestEscapePath(map, start, bombs, allBombers, myBomber) {
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner ? owner.explosionRange : 2
 
-    const gridBombX = Math.floor(bomb.x / STEP_COUNT)
-    const gridBombY = Math.floor(bomb.y / STEP_COUNT)
+    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
 
     unsafeTiles.add(`${gridBombX},${gridBombY}`)
 
@@ -245,8 +245,8 @@ function findUnsafeTiles(map, bombs = [], allBombers = [], myBomber) {
       range = bomb.range || myBomber?.explosionRange || 3
     }
 
-    const gridBombX = Math.floor(bomb.x / STEP_COUNT)
-    const gridBombY = Math.floor(bomb.y / STEP_COUNT)
+    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
 
     unsafeCoords.add(`${gridBombX},${gridBombY}`)
     for (const [dx, dy] of DIRS) {
@@ -278,8 +278,8 @@ function findSafeTiles(map, bombs = [], allBombers = [], myBomber) {
       const owner = allBombers.find((b) => b.uid === bomb.uid)
       const range = owner ? owner.explosionRange : 2
 
-      const gridBombX = Math.floor(bomb.x / STEP_COUNT)
-      const gridBombY = Math.floor(bomb.y / STEP_COUNT)
+      const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+      const gridBombY = Math.floor(bomb.y / GRID_SIZE)
 
       // The above simple check is not enough as walls block explosions.
       // We need to check line-of-sight.
@@ -418,8 +418,8 @@ export function decideNextAction(state, myUid) {
 
   // convert to grid coordinate
   const player = {
-    x: Math.floor(myBomber.x / STEP_COUNT),
-    y: Math.floor(myBomber.y / STEP_COUNT),
+    x: Math.floor(myBomber.x / GRID_SIZE),
+    y: Math.floor(myBomber.y / GRID_SIZE),
   }
 
   // Anti-oscillation check: Detect if we're bouncing between same positions
@@ -459,8 +459,8 @@ export function decideNextAction(state, myUid) {
   // if (bombs.length > 0) {
   //   console.log("   Bomb Details:");
   //   bombs.forEach((bomb, idx) => {
-  //     const gridX = Math.floor(bomb.x / STEP_COUNT);
-  //     const gridY = Math.floor(bomb.y / STEP_COUNT);
+  //     const gridX = Math.floor(bomb.x / GRID_SIZE);
+  //     const gridY = Math.floor(bomb.y / GRID_SIZE);
   //     console.log(
   //       `   Bomb ${idx + 1}: [${gridX}, ${gridY}] | isExploded: ${
   //         bomb.isExploded || false
@@ -610,8 +610,8 @@ export function decideNextAction(state, myUid) {
         const futureBombs = [
           ...activeBombs,
           {
-            x: player.x * STEP_COUNT,
-            y: player.y * STEP_COUNT,
+            x: player.x * GRID_SIZE,
+            y: player.y * GRID_SIZE,
             explosionRange: myBomber.explosionRange,
             uid: myBomber.uid,
           },
