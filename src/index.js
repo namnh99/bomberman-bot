@@ -178,7 +178,7 @@ socket.on("user", (state) => {
 })
 
 socket.on("player_move", (data) => {
-  if (!currentState) return
+  if (!currentState || data.uid !== myUid) return
   // Mock to my bomber
   const bomberIndex = currentState.bombers.findIndex((b) => b.uid === data.uid)
   if (bomberIndex !== -1) {
@@ -262,8 +262,7 @@ socket.on("item_collected", (data) => {
   currentState.map[itemY][itemX] = null
 
   if (data.bomber?.uid === myUid && data.item.type === "S") {
-    speed = data.bomber.speed + data.bomber.speedCount
-    if (speed > 3) speed = 3
+    speed = data.bomber.speed
     console.log(`⚡ Speed increased: ${speed}`)
   }
 
@@ -356,20 +355,18 @@ const smoothMove = (direction, isEscapeMove = false) => {
         smoothMove(nextMove, true)
       } else {
         // Escape complete or normal move done
-        // if (escapeMode) {
-        //   console.log(`✅ Escape sequence completed!`);
-        //   escapeMode = false;
-        //   escapePath = [];
-        //   console.log(
-        //     `   ⏸️ Waiting briefly before next decision (bombs may still be active)...`
-        //   );
-        //   // Wait a bit before making next decision to avoid re-entering danger zones
-        //   // The bomb that caused the escape might still be active
-        //   setTimeout(() => {
-        //     makeDecision();
-        //   }, 500); // 500ms delay to let bombs explode
-        //   return; // Don't call makeDecision immediately
-        // }
+        if (escapeMode) {
+          console.log(`✅ Escape sequence completed!`)
+          escapeMode = false
+          escapePath = []
+          console.log(`   ⏸️ Waiting briefly before next decision (bombs may still be active)...`)
+          // Wait a bit before making next decision to avoid re-entering danger zones
+          // The bomb that caused the escape might still be active
+          setTimeout(() => {
+            makeDecision()
+          }, 500) // 500ms delay to let bombs explode
+          return // Don't call makeDecision immediately
+        }
         makeDecision()
       }
     }
@@ -434,23 +431,23 @@ function makeDecision() {
       let alignDirection = null
 
       if (action === "UP" || action === "DOWN") {
-        moveOver = myBomber.x % GRID_SIZE
+        moveOver = (myBomber.x % GRID_SIZE) - offset
         if (moveOver !== 0) {
           // Choose shortest path to align
           if (moveOver > GRID_SIZE / 2) {
             alignDirection = "RIGHT"
-            moveOver = GRID_SIZE - moveOver
+            moveOver = GRID_SIZE - moveOver + offset
           } else {
             alignDirection = "LEFT"
           }
         }
       } else if (action === "LEFT" || action === "RIGHT") {
-        moveOver = myBomber.y % GRID_SIZE
+        moveOver = (myBomber.y % GRID_SIZE) - offset
         if (moveOver !== 0) {
           // Choose shortest path to align
           if (moveOver > GRID_SIZE / 2) {
             alignDirection = "DOWN"
-            moveOver = GRID_SIZE - moveOver
+            moveOver = GRID_SIZE - moveOver + offset
           } else {
             alignDirection = "UP"
           }
@@ -460,32 +457,31 @@ function makeDecision() {
       // Execute alignment before main move
       // Note: Always align when moving perpendicular, even if misalignment is small
       // The server may reject movement if not properly aligned
-      // if (moveOver > 0 && alignDirection) {
-      //   // Calculate alignment steps based on speed
-      //   const alignSteps = Math.ceil(moveOver / myBomber.speed)
-      //   let stepsLeft = alignSteps
-      //   console.log(
-      //     `🔧 Aligning ${alignDirection} (${moveOver}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${action}`,
-      //   )
+      if (moveOver > 0 && alignDirection) {
+        // Calculate alignment steps based on speed
+        const alignSteps = Math.ceil(moveOver / myBomber.speed)
+        let stepsLeft = alignSteps
+        console.log(
+          `🔧 Aligning ${alignDirection} (${moveOver}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${action}`,
+        )
 
-      //   alignIntervalId = setInterval(() => {
-      //     if (stepsLeft > 0) {
-      //       socket.emit("move", { orient: alignDirection })
-      //       stepsLeft--
-      //     } else {
-      //       clearInterval(alignIntervalId)
-      //       alignIntervalId = null
-      //       console.log(`✅ Alignment complete, starting move: ${action}`)
-      //       // Start main move after alignment
-      //       smoothMove(action)
-      //     }
-      //   }, STEP_DELAY)
-      // } else {
-      //   // Already perfectly aligned, move directly
-      //   console.log(`✅ Already aligned, moving: ${action}`)
-      //   smoothMove(action)
-      // }
-      smoothMove(action)
+        alignIntervalId = setInterval(() => {
+          if (stepsLeft > 0) {
+            socket.emit("move", { orient: alignDirection })
+            stepsLeft--
+          } else {
+            clearInterval(alignIntervalId)
+            alignIntervalId = null
+            console.log(`✅ Alignment complete, starting move: ${action}`)
+            // Start main move after alignment
+            smoothMove(action)
+          }
+        }, STEP_DELAY)
+      } else {
+        // Already perfectly aligned, move directly
+        console.log(`✅ Already aligned, moving: ${action}`)
+        smoothMove(action)
+      }
     } else if (action === "BOMB") {
       console.log(`💣 Placing bomb`)
       placeBomb()

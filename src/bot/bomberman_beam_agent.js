@@ -1,28 +1,12 @@
-// bomberman_chest_bomb_agent.js
-// Run: const { decideNextAction } = require('./bomberman_chest_bomb_agent');
-
-import { GRID_SIZE } from "../constants/index.js"
-
-const DIRS = [
-  [0, -1, "UP"],
-  [0, 1, "DOWN"],
-  [-1, 0, "LEFT"],
-  [1, 0, "RIGHT"],
-]
-
-const WALKABLE = [null, "B", "R", "S"] // Empty spaces and all items are walkable
-const BREAKABLE = ["C"] // Only Chests are breakable
-
-// Strategic values for different items
-const ITEM_VALUES = {
-  S: 3.0, // Speed - very valuable for mobility and escaping
-  R: 2.5, // Explosion Range - valuable for destroying more chests
-  B: 2.0, // Bomb Count - valuable for offensive play
-}
-
-const ITEM_PRIORITY_BIAS = 2 // Bot will prefer items if path is 2 steps longer than chest
-let recentlyBombed = [] // Memory of recently bombed locations to avoid loops.
-const RECENT_BOMB_MEMORY = 3 // How many recent bombs to remember.
+import {
+  GRID_SIZE,
+  DIRS,
+  WALKABLE,
+  BREAKABLE,
+  BLOCKABLE_EXPLOSION,
+  ITEM_VALUES,
+  ITEM_PRIORITY_BIAS,
+} from "../constants/index.js"
 
 // Anti-oscillation: Track last position and decision to prevent immediate backtracking
 let lastPosition = null
@@ -36,13 +20,64 @@ function trackDecision(player, action) {
   lastDecision = action
 }
 
+/**
+ * Helper function to get a set of all coordinates currently in an explosion radius.
+ */
+function findUnsafeTiles(map, bombs = [], allBombers = []) {
+  const unsafeCoords = new Set()
+  const h = map.length
+  const w = map[0].length
+
+  for (const bomb of bombs) {
+    if (bomb.isExploded) continue
+
+    const owner = allBombers.find((b) => b.uid === bomb.uid)
+    const range = owner ? owner.explosionRange : 2
+
+    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
+
+    unsafeCoords.add(`${gridBombX},${gridBombY}`)
+    for (const [dx, dy] of DIRS) {
+      for (let step = 1; step <= range; step++) {
+        const nx = gridBombX + dx * step
+        const ny = gridBombY + dy * step
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
+        if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
+        unsafeCoords.add(`${nx},${ny}`)
+      }
+    }
+  }
+  return unsafeCoords
+}
+
+/**
+ * Find safe empty tiles (not inside explosion radius)
+ */
+function findSafeTiles(map, bombs = [], allBombers = []) {
+  const safeTiles = []
+  const h = map.length
+  const w = map[0].length
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (map[y][x] === null && !unsafeTiles.has(`${x},${y}`)) {
+        safeTiles.push({ x, y })
+      }
+    }
+  }
+
+  return safeTiles
+}
+
 /* ================================
    1️⃣ Utility Functions
    ================================ */
 
-function findAllItems(map, bombs, allBombers, myBomber) {
+function findAllItems(map, bombs, allBombers) {
   const items = []
-  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers, myBomber)
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
       const cell = map[y][x]
@@ -55,9 +90,9 @@ function findAllItems(map, bombs, allBombers, myBomber) {
   return items
 }
 
-function findAllChests(map, bombs, allBombers, myBomber) {
+function findAllChests(map, bombs, allBombers) {
   const targets = []
-  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers, myBomber)
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
       // Ignore chests in a blast zone
@@ -73,34 +108,14 @@ function findAllChests(map, bombs, allBombers, myBomber) {
  * A unified BFS that finds the best path to a target, avoiding active bomb zones
  * and keeping track of breakable chests in the way.
  */
-function findBestPath(map, start, targets, bombs, allBombers, myBomber, isEscaping = false) {
+function findBestPath(map, start, targets, bombs, allBombers, isEscaping = false) {
   const h = map.length
   const w = map[0].length
   const queue = [[start.x, start.y, [], []]] // [x, y, path, walls]
   const visited = new Set([`${start.x},${start.y}`])
 
   // Pre-calculate unsafe tiles for O(1) lookup and better performance
-  const unsafeTiles = new Set()
-  for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner ? owner.explosionRange : 2
-
-    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
-    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
-
-    unsafeTiles.add(`${gridBombX},${gridBombY}`)
-    for (const [dx, dy] of DIRS) {
-      for (let step = 1; step <= range; step++) {
-        const nx = gridBombX + dx * step
-        const ny = gridBombY + dy * step
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
-        if (map[ny][nx] === "W") break
-        unsafeTiles.add(`${nx},${ny}`)
-      }
-    }
-  }
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
   while (queue.length) {
     const [x, y, path, walls] = queue.shift()
@@ -163,28 +178,7 @@ function findShortestEscapePath(map, start, bombs, allBombers, myBomber) {
   const w = map[0].length
 
   // Pre-calculate all unsafe tiles for O(1) lookup instead of checking each time
-  const unsafeTiles = new Set()
-  for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner ? owner.explosionRange : 2
-
-    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
-    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
-
-    unsafeTiles.add(`${gridBombX},${gridBombY}`)
-
-    for (const [dx, dy] of DIRS) {
-      for (let step = 1; step <= range; step++) {
-        const nx = gridBombX + dx * step
-        const ny = gridBombY + dy * step
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
-        if (map[ny][nx] === "W") break
-        unsafeTiles.add(`${nx},${ny}`)
-      }
-    }
-  }
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
   // BFS queue: [x, y, path]
   const queue = [[start.x, start.y, []]]
@@ -224,89 +218,6 @@ function findShortestEscapePath(map, start, bombs, allBombers, myBomber) {
   }
 
   return null // No escape route found
-}
-
-/**
- * Helper function to get a set of all coordinates currently in an explosion radius.
- */
-function findUnsafeTiles(map, bombs = [], allBombers = [], myBomber) {
-  const unsafeCoords = new Set()
-  const h = map.length
-  const w = map[0].length
-
-  for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
-    let range
-    if (bomb.uid) {
-      const owner = allBombers.find((b) => b.uid === bomb.uid)
-      range = owner ? owner.explosionRange : 2
-    } else {
-      range = bomb.range || myBomber?.explosionRange || 3
-    }
-
-    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
-    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
-
-    unsafeCoords.add(`${gridBombX},${gridBombY}`)
-    for (const [dx, dy] of DIRS) {
-      for (let step = 1; step <= range; step++) {
-        const nx = gridBombX + dx * step
-        const ny = gridBombY + dy * step
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
-        if (map[ny][nx] === "W") break
-        unsafeCoords.add(`${nx},${ny}`)
-      }
-    }
-  }
-  return unsafeCoords
-}
-
-/**
- * Find safe empty tiles (not inside explosion radius)
- */
-function findSafeTiles(map, bombs = [], allBombers = [], myBomber) {
-  const safeTiles = []
-  const h = map.length
-  const w = map[0].length
-
-  function inExplosionRadius(x, y) {
-    for (const bomb of bombs) {
-      if (bomb.isExploded) continue // Ignore exploded bombs
-
-      // This is an existing bomb on the map
-      const owner = allBombers.find((b) => b.uid === bomb.uid)
-      const range = owner ? owner.explosionRange : 2
-
-      const gridBombX = Math.floor(bomb.x / GRID_SIZE)
-      const gridBombY = Math.floor(bomb.y / GRID_SIZE)
-
-      // The above simple check is not enough as walls block explosions.
-      // We need to check line-of-sight.
-      if (gridBombX === x && gridBombY === y) return true
-      for (const [dx, dy] of DIRS) {
-        for (let step = 1; step <= range; step++) {
-          const nx = gridBombX + dx * step
-          const ny = gridBombY + dy * step
-          if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
-          // Permanent walls 'W' stop explosions.
-          if (map[ny][nx] === "W") break
-          if (nx === x && ny === y) return true
-        }
-      }
-    }
-    return false
-  }
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (map[y][x] === null && !inExplosionRadius(x, y)) {
-        safeTiles.push({ x, y })
-      }
-    }
-  }
-
-  return safeTiles
 }
 
 function handleTarget(result, state, myUid) {
@@ -354,7 +265,6 @@ function handleTarget(result, state, myUid) {
           futureSafeTiles,
           futureBombs,
           bombers,
-          myBomber,
           true, // isEscaping = true (can cross danger to reach safety)
         )
 
@@ -547,44 +457,40 @@ export function decideNextAction(state, myUid) {
   // console.log("\n🔍 PHASE 2: Target Analysis");
 
   // 1️⃣ Find path to nearest item (that is not in a danger zone)
-  const items = findAllItems(map, activeBombs, bombers, myBomber)
+  const items = findAllItems(map, activeBombs, bombers)
   // console.log(`   Items found: ${items.length}`);
-  if (items.length > 0) {
-    // console.log(
-    //   `   Item locations:`,
-    //   items
-    //     .slice(0, 3)
-    //     .map((i) => `[${i.x},${i.y}]`)
-    //     .join(", ")
-    // );
-  }
+  // if (items.length > 0) {
+  //   console.log(
+  //     `   Item locations:`,
+  //     items
+  //       .slice(0, 3)
+  //       .map((i) => `[${i.x},${i.y}]`)
+  //       .join(", "),
+  //   )
+  // }
 
-  const itemResult = items.length
-    ? findBestPath(map, player, items, activeBombs, bombers, myBomber)
-    : null
+  const itemResult = items.length ? findBestPath(map, player, items, activeBombs, bombers) : null
 
-  if (itemResult) {
-    // console.log(
-    //   `   ✅ Path to item: ${itemResult.path.join(" → ")} (${
-    //     itemResult.path.length
-    //   } steps)`
-    // );
-  } else if (items.length > 0) {
-    // console.log(`   ❌ No path to items found`);
-  }
+  // if (itemResult) {
+  //   console.log(
+  //     `   ✅ Path to item: ${itemResult.path.join(" → ")} (${itemResult.path.length} steps)`,
+  //   )
+  // } else if (items.length > 0) {
+  //   console.log(`   ❌ No path to items found`)
+  // }
 
   // 2️⃣ Find path to nearest chest (that is not in a danger zone)
-  const chests = findAllChests(map, activeBombs, bombers, myBomber)
-  // console.log(`   Chests found: ${chests.length}`);
-  if (chests.length > 0) {
-    // console.log(
-    //   `   Chest locations:`,
-    //   chests
-    //     .slice(0, 3)
-    //     .map((c) => `[${c.x},${c.y}]`)
-    //     .join(", ")
-    // );
-  }
+  const chests = findAllChests(map, activeBombs, bombers)
+  // console.log(`   Chests found: ${chests.length}`)
+  // if (chests.length > 0) {
+  //   console.log(
+  //     `   Chest locations:`,
+  //     chests
+  //       .slice(0, 3)
+  //       .map((c) => `[${c.x},${c.y}]`)
+  //       .join(", "),
+  //   )
+  // }
 
   let chestResult = null
   if (chests.length) {
@@ -601,12 +507,6 @@ export function decideNextAction(state, myUid) {
       // );
 
       if (myBomber.bombCount) {
-        // Add to memory before deciding to bomb
-        recentlyBombed.push({ x: adjacentChest.x, y: adjacentChest.y })
-        if (recentlyBombed.length > RECENT_BOMB_MEMORY) {
-          recentlyBombed.shift() // Keep memory size limited
-        }
-
         const futureBombs = [
           ...activeBombs,
           {
@@ -629,7 +529,6 @@ export function decideNextAction(state, myUid) {
             futureSafeTiles,
             futureBombs,
             bombers,
-            myBomber,
             true, // isEscaping = true (can cross danger to reach safety)
           )
 
@@ -676,7 +575,7 @@ export function decideNextAction(state, myUid) {
     // console.log(`   Adjacent chest targets: ${adjacentTargets.length}`);
 
     if (adjacentTargets.length) {
-      chestResult = findBestPath(map, player, adjacentTargets, activeBombs, bombers, myBomber)
+      chestResult = findBestPath(map, player, adjacentTargets, activeBombs, bombers)
       if (chestResult) {
         // console.log(
         //   `   ✅ Path to chest: ${chestResult.path.join(" → ")} (${
@@ -727,26 +626,19 @@ export function decideNextAction(state, myUid) {
   // console.log(`\n🔍 PHASE 6: Exploration Mode`);
   // console.log(`   Safe exploration tiles: ${safeTiles.length}`);
 
-  // if (safeTiles.length > 0) {
-  //   const explorePath = findBestPath(
-  //     map,
-  //     player,
-  //     safeTiles,
-  //     activeBombs, // FIX: Use activeBombs instead of bombs
-  //     bombers,
-  //     myBomber,
-  //   )
-  //   if (explorePath && explorePath.path.length > 0) {
-  //     // console.log(`   ✅ Exploration path: ${explorePath.path.join(" → ")}`);
-  //     // console.log("🎯 DECISION: EXPLORE");
-  //     // console.log("   Action:", explorePath.path[0]);
-  //     // console.log("=".repeat(90) + "\n");
-  //     trackDecision(player, explorePath.path[0]) // Track explore decision
-  //     return { action: explorePath.path[0] }
-  //   } else {
-  //     // console.log(`   ❌ No exploration path found`);
-  //   }
-  // }
+  if (safeTiles.length > 0) {
+    const explorePath = findBestPath(map, player, safeTiles, activeBombs, bombers)
+    if (explorePath && explorePath.path.length > 0) {
+      // console.log(`   ✅ Exploration path: ${explorePath.path.join(" → ")}`);
+      // console.log("🎯 DECISION: EXPLORE");
+      // console.log("   Action:", explorePath.path[0]);
+      // console.log("=".repeat(90) + "\n");
+      trackDecision(player, explorePath.path[0]) // Track explore decision
+      return { action: explorePath.path[0] }
+    } else {
+      // console.log(`   ❌ No exploration path found`);
+    }
+  }
 
   // console.log("🎯 DECISION: STAY (No options)");
   // console.log("=".repeat(90) + "\n");
