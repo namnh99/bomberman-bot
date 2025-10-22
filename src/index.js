@@ -50,8 +50,6 @@ function setupManualControl() {
   }
 
   process.stdin.on("keypress", (str, key) => {
-    console.log(`🔑 Key pressed: ${key?.name || str} (ctrl: ${key?.ctrl})`) // Debug log
-
     // Handle Ctrl+C to exit
     if (key && key.ctrl && key.name === "c") {
       process.exit()
@@ -203,8 +201,10 @@ socket.on("new_bomb", (bomb) => {
   //   )}] | bomber: [${Math.floor(bommber?.x / GRID_SIZE)}, ${Math.floor(bommber?.y / GRID_SIZE)}]`,
   // )
   currentState.bombs.push(bomb)
-  // console.log(`   � Total bombs in state: ${currentState.bombs.length}`);
-  if (!manualMode) {
+  // console.log(`   📊 Total bombs in state: ${currentState.bombs.length}`);
+
+  // Don't interrupt if we're already escaping or moving
+  if (!manualMode && !moveIntervalId && !alignIntervalId && !escapeMode) {
     makeDecision() // Re-evaluate decision when a new bomb appears
   }
 })
@@ -224,7 +224,9 @@ socket.on("bomb_explode", (bomb) => {
     currentState.bombs.splice(bombIndex, 1)
   }
   // console.log(`   📊 Remaining bombs in state: ${currentState.bombs.length}`);
-  if (!manualMode) {
+
+  // Don't interrupt if we're already moving or escaping
+  if (!manualMode && !moveIntervalId && !alignIntervalId && !escapeMode) {
     makeDecision() // Re-evaluate decision after an explosion
   }
 })
@@ -235,7 +237,7 @@ socket.on("chest_destroyed", (chest) => {
   const chestY = Math.floor(chest.y / GRID_SIZE)
   let item = null
 
-  if (chest.item?.type) {
+  if (chest.item && chest.item.type) {
     switch (chest.item.type) {
       case "S":
         item = "S"
@@ -261,7 +263,7 @@ socket.on("item_collected", (data) => {
   const itemY = Math.floor(data.item.y / GRID_SIZE)
   currentState.map[itemY][itemX] = null
 
-  if (data.bomber?.uid === myUid && data.item.type === "S") {
+  if (data.bomber && data.bomber.uid === myUid && data.item.type === "S") {
     speed = data.bomber.speed
     console.log(`⚡ Speed increased: ${speed}`)
   }
@@ -304,8 +306,8 @@ const smoothMove = (direction, isEscapeMove = false) => {
   }
 
   const currentBomber = currentState.bombers.find((b) => b.uid === myUid)
-  const currentX = currentBomber?.x
-  const currentY = currentBomber?.y
+  const currentX = currentBomber ? currentBomber.x : null
+  const currentY = currentBomber ? currentBomber.y : null
   let pixelsToMove = 0
   let i = 0
 
@@ -339,19 +341,19 @@ const smoothMove = (direction, isEscapeMove = false) => {
 
   moveIntervalId = setInterval(() => {
     if (i < stepsNeeded) {
-      console.log(`   ➡️  Move step ${i + 1}/${stepsNeeded} (${direction})`)
+      // console.log(`   ➡️  Move step ${i + 1}/${stepsNeeded} (${direction})`)
       move(direction)
       i++
     } else {
       clearInterval(moveIntervalId)
       moveIntervalId = null
       i = 0
-      console.log(`✅ Move complete: ${direction}`)
+      // console.log(`✅ Move complete: ${direction}`)
 
       // If in escape mode, continue with next step or exit escape mode
       if (escapeMode && escapePath.length > 0) {
         const nextMove = escapePath.shift()
-        console.log(`🏃 Continuing escape: ${nextMove} (${escapePath.length} pixels remaining)`)
+        console.log(`🏃 Continuing escape: ${nextMove} (${escapePath.length} steps remaining)`)
         smoothMove(nextMove, true)
       } else {
         // Escape complete or normal move done
@@ -359,12 +361,12 @@ const smoothMove = (direction, isEscapeMove = false) => {
           console.log(`✅ Escape sequence completed!`)
           escapeMode = false
           escapePath = []
-          console.log(`   ⏸️ Waiting briefly before next decision (bombs may still be active)...`)
-          // Wait a bit before making next decision to avoid re-entering danger zones
-          // The bomb that caused the escape might still be active
+          console.log(`   ⏸️ Waiting before next decision to let bombs explode...`)
+          // Wait longer to let bombs explode before re-evaluating
           setTimeout(() => {
+            console.log(`   🔍 Re-evaluating safety after escape...`)
             makeDecision()
-          }, 500) // 500ms delay to let bombs explode
+          }, 1000) // 1 second delay to let bombs explode
           return // Don't call makeDecision immediately
         }
         makeDecision()
@@ -431,25 +433,33 @@ function makeDecision() {
       let alignDirection = null
 
       if (action === "UP" || action === "DOWN") {
-        moveOver = (myBomber.x % GRID_SIZE) - offset
-        if (moveOver !== 0) {
-          // Choose shortest path to align
-          if (moveOver > GRID_SIZE / 2) {
-            alignDirection = "RIGHT"
-            moveOver = GRID_SIZE - moveOver + offset
-          } else {
+        // Check horizontal alignment (X-axis)
+        const xOffset = (myBomber.x % GRID_SIZE) - offset
+        if (Math.abs(xOffset) > 0.5) {
+          // Not aligned, need to move horizontally
+          if (xOffset > 0) {
+            // Too far right, move LEFT
             alignDirection = "LEFT"
+            moveOver = Math.abs(xOffset)
+          } else {
+            // Too far left, move RIGHT
+            alignDirection = "RIGHT"
+            moveOver = Math.abs(xOffset)
           }
         }
       } else if (action === "LEFT" || action === "RIGHT") {
-        moveOver = (myBomber.y % GRID_SIZE) - offset
-        if (moveOver !== 0) {
-          // Choose shortest path to align
-          if (moveOver > GRID_SIZE / 2) {
-            alignDirection = "DOWN"
-            moveOver = GRID_SIZE - moveOver + offset
-          } else {
+        // Check vertical alignment (Y-axis)
+        const yOffset = (myBomber.y % GRID_SIZE) - offset
+        if (Math.abs(yOffset) > 0.5) {
+          // Not aligned, need to move vertically
+          if (yOffset > 0) {
+            // Too far down, move UP
             alignDirection = "UP"
+            moveOver = Math.abs(yOffset)
+          } else {
+            // Too far up, move DOWN
+            alignDirection = "DOWN"
+            moveOver = Math.abs(yOffset)
           }
         }
       }
@@ -458,11 +468,11 @@ function makeDecision() {
       // Note: Always align when moving perpendicular, even if misalignment is small
       // The server may reject movement if not properly aligned
       if (moveOver > 0 && alignDirection) {
-        // Calculate alignment steps based on speed
-        const alignSteps = Math.ceil(moveOver / myBomber.speed)
+        // Calculate alignment steps based on global speed
+        const alignSteps = Math.ceil(moveOver / speed)
         let stepsLeft = alignSteps
         console.log(
-          `🔧 Aligning ${alignDirection} (${moveOver}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${action}`,
+          `🔧 Aligning ${alignDirection} (${moveOver.toFixed(1)}px in ${alignSteps} steps, speed: ${speed}) before moving ${action}`,
         )
 
         alignIntervalId = setInterval(() => {
@@ -473,8 +483,10 @@ function makeDecision() {
             clearInterval(alignIntervalId)
             alignIntervalId = null
             console.log(`✅ Alignment complete, starting move: ${action}`)
-            // Start main move after alignment
-            smoothMove(action)
+            // Wait for server to send updated position before starting main move
+            setTimeout(() => {
+              smoothMove(action)
+            }, 50) // Wait 50ms (~3 server ticks) for position update
           }
         }, STEP_DELAY)
       } else {
