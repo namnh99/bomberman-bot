@@ -1,6 +1,7 @@
 export const GRID_SIZE = 40
 export const STEP_DELAY = 20 // time tick on the server
 export const BOT_SIZE = 35
+export const BOMB_EXPLOSION_TIME = 5000 // Bombs explode after 5 seconds (5000ms)
 
 export const DIRS = [
   [0, -1, "UP"],

@@ -6,6 +6,8 @@ import {
   BLOCKABLE_EXPLOSION,
   ITEM_VALUES,
   ITEM_PRIORITY_BIAS,
+  BOMB_EXPLOSION_TIME,
+  STEP_DELAY,
 } from "../constants/index.js"
 
 // Anti-oscillation: Track last position and decision to prevent immediate backtracking
@@ -50,6 +52,84 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
     }
   }
   return unsafeCoords
+}
+
+/**
+ * Check if a tile will be safe by the time we reach it (considering bomb timers)
+ * @param {number} x - Grid X coordinate
+ * @param {number} y - Grid Y coordinate
+ * @param {number} stepsToReach - Number of steps to reach this tile
+ * @param {Array} bombs - Array of active bombs
+ * @param {Array} allBombers - Array of all bombers
+ * @param {Object} map - Game map
+ * @param {number} currentSpeed - Current movement speed (pixels per tick)
+ * @returns {boolean} - True if tile will be safe when we reach it
+ */
+function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, currentSpeed = 1) {
+  const now = Date.now()
+  // Calculate time to reach this tile (steps * GRID_SIZE / speed * STEP_DELAY)
+  const timeToReach = ((stepsToReach * GRID_SIZE) / currentSpeed) * STEP_DELAY
+
+  const h = map.length
+  const w = map[0].length
+
+  // Check each bomb to see if it will explode before we reach this tile
+  for (const bomb of bombs) {
+    if (bomb.isExploded) continue
+
+    const owner = allBombers.find((b) => b.uid === bomb.uid)
+    const range = owner ? owner.explosionRange : 2
+
+    const gridBombX = Math.floor(bomb.x / GRID_SIZE)
+    const gridBombY = Math.floor(bomb.y / GRID_SIZE)
+
+    // Calculate when this bomb will explode using server's lifeTime
+    const bombCreatedAt = bomb.createdAt || now // Server provides this
+    const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME // Server's lifeTime in ms, fallback to constant
+    const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
+
+    // Check if tile IS the bomb location
+    if (x === gridBombX && y === gridBombY) {
+      // Only allow crossing the bomb tile if we can pass BEFORE it explodes
+      if (timeUntilExplosion > 0 && timeToReach < timeUntilExplosion) {
+        // We can pass through before explosion - continue checking other bombs
+        continue
+      } else {
+        // Bomb will explode while we're on it - UNSAFE
+        return false
+      }
+    }
+
+    // Check if tile is in explosion range
+    let isInBlastZone = false
+    for (const [dx, dy] of DIRS) {
+      for (let step = 1; step <= range; step++) {
+        const nx = gridBombX + dx * step
+        const ny = gridBombY + dy * step
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) break
+        if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
+        if (nx === x && ny === y) {
+          isInBlastZone = true
+          break
+        }
+      }
+      if (isInBlastZone) break
+    }
+
+    // If tile is in blast zone, check timing
+    if (isInBlastZone) {
+      // If bomb will explode before or when we reach this tile, it's UNSAFE
+      if (timeUntilExplosion <= 0 || timeToReach >= timeUntilExplosion) {
+        return false // Tile will be in blast zone when bomb explodes
+      }
+      // Else: we reach before explosion, but we're in blast zone
+      // This is only safe if it's a waypoint we pass through quickly
+      // For now, consider it UNSAFE as a destination
+      return false
+    }
+  }
+
+  return true // Tile is safe from all bombs considering timing
 }
 
 /**
@@ -119,15 +199,13 @@ function findBestPath(map, start, targets, bombs, allBombers, myUid, isEscaping 
   const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
   // ALL bombs block movement, EXCEPT:
-  // - The bomb at our current start position (we're standing on it, can walk off)
+  // - Bombs where bomberPassedThrough is false (bomber still on the bomb, can walk off)
   const activeBombs = bombs.filter((b) => !b.isExploded)
-  const bombTiles = new Set(
-    activeBombs.map((b) => `${Math.floor(b.x / GRID_SIZE)},${Math.floor(b.y / GRID_SIZE)}`),
-  )
-
-  // Check if we're currently standing on a bomb (just placed it)
-  const startKey = `${start.x},${start.y}`
-  const standingOnBomb = bombTiles.has(startKey)
+  const bombTiles = new Map() // Map of "x,y" -> bomb object
+  activeBombs.forEach((b) => {
+    const key = `${Math.floor(b.x / GRID_SIZE)},${Math.floor(b.y / GRID_SIZE)}`
+    bombTiles.set(key, b)
+  })
 
   while (queue.length) {
     const [x, y, path, walls] = queue.shift()
@@ -157,21 +235,16 @@ function findBestPath(map, start, targets, bombs, allBombers, myUid, isEscaping 
         continue
       }
 
-      // Block ALL bomb tiles EXCEPT the one we're currently standing on
-      // (allows escaping immediately after placing, but blocks re-entry)
-      if (bombTiles.has(key)) {
-        // Allow stepping OFF the bomb we're standing on (first move after placing)
-        if (
-          standingOnBomb &&
-          (nx === start.x || ny === start.y) &&
-          Math.abs(nx - start.x) + Math.abs(ny - start.y) === 1
-        ) {
-          // This is an adjacent tile - we can step off our bomb
-        } else {
-          // This is a different bomb tile - block it
-          // console.log(`   ⛔ Skipping bomb tile at [${nx}, ${ny}]`)
+      // Block bomb tiles based on bomberPassedThrough flag
+      const bombAtTile = bombTiles.get(key)
+      if (bombAtTile) {
+        // If bomberPassedThrough === true -> bomb blocks (we already left it)
+        // If bomberPassedThrough === false -> we can walk through (still on it or bomb placed elsewhere)
+        if (bombAtTile.bomberPassedThrough) {
+          // console.log(`   ⛔ Blocking bomb at [${nx}, ${ny}] (already passed through)`)
           continue
         }
+        // else: can walk on it (we're still on the bomb tile)
       }
 
       // When escaping, only prevent going from safe to unsafe
@@ -199,39 +272,52 @@ function findBestPath(map, start, targets, bombs, allBombers, myUid, isEscaping 
 /**
  * Find the FASTEST path to the nearest safe tile using optimized BFS
  * Returns immediately when first safe tile is found (guaranteed shortest)
+ * Now considers bomb explosion times - allows crossing danger zones if we can reach safety in time
  */
 function findShortestEscapePath(map, start, bombs, allBombers, myBomber) {
   const h = map.length
   const w = map[0].length
+  const currentSpeed = myBomber.speed || 1
 
-  // Pre-calculate all unsafe tiles for O(1) lookup instead of checking each time
-  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
-
-  // ALL bombs block movement, EXCEPT the one we're currently standing on
+  // ALL bombs block movement, EXCEPT ones where bomberPassedThrough is false
   const activeBombs = bombs.filter((b) => !b.isExploded)
-  const bombTiles = new Set(
-    activeBombs.map((b) => `${Math.floor(b.x / GRID_SIZE)},${Math.floor(b.y / GRID_SIZE)}`),
-  )
+  const bombTiles = new Map() // Map of "x,y" -> bomb object
+  activeBombs.forEach((b) => {
+    const key = `${Math.floor(b.x / GRID_SIZE)},${Math.floor(b.y / GRID_SIZE)}`
+    bombTiles.set(key, b)
+  })
 
-  // Check if we're standing on a bomb (just placed it)
-  const startKey = `${start.x},${start.y}`
-  const standingOnBomb = bombTiles.has(startKey)
-
-  // BFS queue: [x, y, path]
-  const queue = [[start.x, start.y, []]]
+  // BFS queue: [x, y, path, stepCount]
+  const queue = [[start.x, start.y, [], 0]]
   const visited = new Set([`${start.x},${start.y}`])
 
   while (queue.length) {
-    const [x, y, path] = queue.shift()
+    const [x, y, path, stepCount] = queue.shift()
 
-    // Check if current position is safe (O(1) lookup)
-    if (!unsafeTiles.has(`${x},${y}`)) {
-      // Found the nearest safe tile! Return immediately
-      if (path.length > 0) {
+    // Check if we're currently on a bomb tile
+    const key = `${x},${y}`
+    const bombAtCurrentTile = bombTiles.get(key)
+
+    // Check if current position will be safe considering bomb timers
+    const willBeSafe = isTileSafeByTime(x, y, stepCount, activeBombs, allBombers, map, currentSpeed)
+
+    // If this tile will be safe when we reach it
+    if (willBeSafe) {
+      // Only consider it a valid escape destination if it's NOT a bomb tile
+      if (!bombAtCurrentTile && path.length > 0) {
+        console.log(
+          `   🕐 Found time-safe escape to [${x}, ${y}] in ${stepCount} steps (${(((stepCount * GRID_SIZE) / currentSpeed) * STEP_DELAY).toFixed(0)}ms)`,
+        )
         return { path, target: { x, y }, distance: path.length }
       }
+      // If it's a bomb tile, we can pass through it but not stop here
+      // Continue BFS to find a safe non-bomb destination
+    } else if (path.length === 0) {
       // Already safe at start (shouldn't happen in escape scenario)
       return null
+    } else {
+      // This tile is unsafe - don't explore further from here
+      continue
     }
 
     // Explore all 4 directions
@@ -247,26 +333,13 @@ function findShortestEscapePath(map, start, bombs, allBombers, myBomber) {
 
       const cell = map[ny][nx]
 
-      // Block ALL bomb tiles EXCEPT the one we're standing on (first step off)
-      if (bombTiles.has(key)) {
-        // Allow stepping OFF the bomb we're standing on (first move only)
-        if (
-          standingOnBomb &&
-          (nx === start.x || ny === start.y) &&
-          Math.abs(nx - start.x) + Math.abs(ny - start.y) === 1
-        ) {
-          // This is an adjacent tile - we can step off our bomb
-        } else {
-          // This is a different bomb tile - block it
-          // console.log(`   ⛔ Avoiding bomb tile during escape BFS at [${nx}, ${ny}]`)
-          continue
-        }
-      }
+      // During escape, we DON'T block bomb tiles - we can cross them if timing allows
+      // The isTileSafeByTime() check above already ensures we won't be on the bomb when it explodes
 
       // Only walk through empty spaces and items (not walls or chests)
       if (WALKABLE.includes(cell)) {
         visited.add(key)
-        queue.push([nx, ny, [...path, dir]])
+        queue.push([nx, ny, [...path, dir], stepCount + 1])
       }
     }
   }
@@ -325,8 +398,14 @@ function handleTarget(result, state, myUid) {
           console.log("   💣 Bombing wall at", `[${targetWall.x}, ${targetWall.y}]`)
           console.log("   🏃 Escape action:", escapePath.path[0])
           console.log("=".repeat(60) + "\n")
+
           if (myBomber.bombCount) {
-            return { action: "BOMB", escapeAction: escapePath.path[0] }
+            return {
+              action: "BOMB",
+              escapeAction: escapePath.path[0],
+              isEscape: true,
+              fullPath: escapePath.path,
+            }
           }
         } else {
           console.log(`   ❌ No escape path found`)
@@ -474,20 +553,33 @@ export function decideNextAction(state, myUid) {
     }
 
     // No escape route found, try to move to any adjacent walkable tile
-    // Prefer tiles that are NOT in bomb zones
+    // Prefer tiles that will be safe considering bomb explosion times
     console.log("   ⚠️ No direct escape path, trying emergency moves...")
     const unsafeTiles = findUnsafeTiles(map, activeBombs, bombers)
+    const currentSpeed = myBomber.speed || 1
 
-    // First pass: try to find a walkable tile that's NOT in a bomb zone
+    // First pass: try to find a walkable tile that will be safe by the time we reach it
     for (const [dx, dy, dir] of DIRS) {
       const nx = player.x + dx
       const ny = player.y + dy
       if (nx >= 0 && ny >= 0 && nx < map[0].length && ny < map.length) {
         const cell = map[ny][nx]
         const key = `${nx},${ny}`
-        if (WALKABLE.includes(cell) && !unsafeTiles.has(key)) {
-          console.log(`   ✅ Safe emergency move: ${dir} to [${nx}, ${ny}]`)
-          console.log("🎯 DECISION: EMERGENCY ESCAPE (to safe tile)")
+
+        // Check if this tile is a bomb location
+        const isBombTile = activeBombs.some((bomb) => {
+          const bombGridX = Math.floor(bomb.x / GRID_SIZE)
+          const bombGridY = Math.floor(bomb.y / GRID_SIZE)
+          return bombGridX === nx && bombGridY === ny
+        })
+
+        // Check if tile will be safe considering bomb timers (1 step away)
+        const willBeSafe = isTileSafeByTime(nx, ny, 1, activeBombs, bombers, map, currentSpeed)
+
+        // Only consider it safe if it's NOT a bomb tile AND will be safe
+        if (WALKABLE.includes(cell) && willBeSafe && !isBombTile) {
+          console.log(`   ✅ Time-safe emergency move: ${dir} to [${nx}, ${ny}]`)
+          console.log("🎯 DECISION: EMERGENCY ESCAPE (time-safe tile)")
           console.log("   Action:", dir)
           console.log("=".repeat(90) + "\n")
           trackDecision(player, dir)
@@ -496,13 +588,49 @@ export function decideNextAction(state, myUid) {
       }
     }
 
-    // Second pass: if no safe tiles, just pick any walkable tile (last resort)
+    // Second pass: try tiles not currently in blast zones (even if bombs will explode soon)
     for (const [dx, dy, dir] of DIRS) {
       const nx = player.x + dx
       const ny = player.y + dy
       if (nx >= 0 && ny >= 0 && nx < map[0].length && ny < map.length) {
         const cell = map[ny][nx]
-        if (WALKABLE.includes(cell)) {
+        const key = `${nx},${ny}`
+
+        // Check if this tile is a bomb location
+        const isBombTile = activeBombs.some((bomb) => {
+          const bombGridX = Math.floor(bomb.x / GRID_SIZE)
+          const bombGridY = Math.floor(bomb.y / GRID_SIZE)
+          return bombGridX === nx && bombGridY === ny
+        })
+
+        if (WALKABLE.includes(cell) && !unsafeTiles.has(key) && !isBombTile) {
+          console.log(
+            `   ⚠️ Currently safe emergency move: ${dir} to [${nx}, ${ny}] (but bomb may explode!)`,
+          )
+          console.log("🎯 DECISION: EMERGENCY ESCAPE (currently safe)")
+          console.log("   Action:", dir)
+          console.log("=".repeat(90) + "\n")
+          trackDecision(player, dir)
+          return { action: dir }
+        }
+      }
+    }
+
+    // Third pass: if no safe tiles, just pick any walkable tile (last resort)
+    for (const [dx, dy, dir] of DIRS) {
+      const nx = player.x + dx
+      const ny = player.y + dy
+      if (nx >= 0 && ny >= 0 && nx < map[0].length && ny < map.length) {
+        const cell = map[ny][nx]
+
+        // Check if this tile is a bomb location
+        const isBombTile = activeBombs.some((bomb) => {
+          const bombGridX = Math.floor(bomb.x / GRID_SIZE)
+          const bombGridY = Math.floor(bomb.y / GRID_SIZE)
+          return bombGridX === nx && bombGridY === ny
+        })
+
+        if (WALKABLE.includes(cell) && !isBombTile) {
           console.log(`   ⚠️ Last resort move: ${dir} to [${nx}, ${ny}] (still in danger!)`)
           console.log("🎯 DECISION: EMERGENCY ESCAPE (desperate)")
           console.log("   Action:", dir)
@@ -635,8 +763,12 @@ export function decideNextAction(state, myUid) {
             console.log("   💣 Bombing chest at", `[${adjacentChest.x}, ${adjacentChest.y}]`)
             console.log("   🏃 Escape action:", escapePath.path[0])
             console.log("=".repeat(90) + "\n")
-            if (myBomber.bombCount) {
-              return { action: "BOMB", escapeAction: escapePath.path[0] }
+
+            return {
+              action: "BOMB",
+              isEscape: true,
+              escapeAction: escapePath.path[0],
+              fullPath: escapePath.path,
             }
           } else {
             console.log(`   ❌ No escape path found after bombing`)
