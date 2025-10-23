@@ -22,8 +22,9 @@ function trackDecision(player, action) {
 
 /**
  * Helper function to get a set of all coordinates currently in an explosion radius.
+ * Exported for use in escape path validation.
  */
-function findUnsafeTiles(map, bombs = [], allBombers = []) {
+export function findUnsafeTiles(map, bombs = [], allBombers = []) {
   const unsafeCoords = new Set()
   const h = map.length
   const w = map[0].length

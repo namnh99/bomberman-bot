@@ -4,6 +4,9 @@ import { decideNextAction } from "./bot/bomberman_beam_agent.js"
 import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "./constants/index.js"
 import readline from "readline"
 
+// Import utility functions for escape path validation
+import { findUnsafeTiles } from "./bot/bomberman_beam_agent.js"
+
 const socket = socketManager.getSocket()
 const offset = (GRID_SIZE - BOT_SIZE) / 2
 
@@ -170,7 +173,8 @@ socket.on("connect", () => {
 
 socket.on("user", (state) => {
   currentState = state
-  if (!manualMode) {
+  // Only make decision if not in manual mode AND not currently escaping
+  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
     makeDecision()
   }
 })
@@ -203,8 +207,65 @@ socket.on("new_bomb", (bomb) => {
   currentState.bombs.push(bomb)
   // console.log(`   📊 Total bombs in state: ${currentState.bombs.length}`);
 
-  // Don't interrupt if we're already escaping or moving
-  if (!manualMode && !moveIntervalId && !alignIntervalId && !escapeMode) {
+  // CRITICAL: Check if new bomb affects our escape path
+  if (escapeMode && escapePath.length > 0) {
+    console.log(`\n🚨 NEW BOMB during escape! Checking if escape path is still safe...`)
+
+    const myBomber = currentState.bombers.find((b) => b.uid === myUid)
+    if (myBomber) {
+      const playerGridPos = {
+        x: Math.floor(myBomber.x / GRID_SIZE),
+        y: Math.floor(myBomber.y / GRID_SIZE),
+      }
+
+      // Check if the new bomb threatens our escape path
+      const unsafeTiles = findUnsafeTiles(
+        currentState.map,
+        currentState.bombs,
+        currentState.bombers,
+      )
+
+      // Simulate our escape path to see if it goes through danger
+      let currentX = playerGridPos.x
+      let currentY = playerGridPos.y
+      let pathCompromised = false
+
+      for (const step of escapePath) {
+        // Calculate next position based on direction
+        if (step === "UP") currentY--
+        else if (step === "DOWN") currentY++
+        else if (step === "LEFT") currentX--
+        else if (step === "RIGHT") currentX++
+
+        // Check if this step goes through a bomb zone
+        if (unsafeTiles.has(`${currentX},${currentY}`)) {
+          console.log(`   ⚠️  Escape path compromised at step [${currentX}, ${currentY}]!`)
+          pathCompromised = true
+          break
+        }
+      }
+
+      if (pathCompromised) {
+        console.log(`   🔄 ABORT ESCAPE - Finding new escape route!`)
+        // Cancel current escape
+        escapeMode = false
+        escapePath = []
+        if (moveIntervalId) {
+          clearInterval(moveIntervalId)
+          moveIntervalId = null
+        }
+        if (alignIntervalId) {
+          clearInterval(alignIntervalId)
+          alignIntervalId = null
+        }
+        // Immediately find new escape route
+        makeDecision()
+      } else {
+        console.log(`   ✅ Escape path still safe, continuing...`)
+      }
+    }
+  } else if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+    console.log("🔔 New bomb detected, re-evaluating...")
     makeDecision() // Re-evaluate decision when a new bomb appears
   }
 })
@@ -225,9 +286,12 @@ socket.on("bomb_explode", (bomb) => {
   }
   // console.log(`   📊 Remaining bombs in state: ${currentState.bombs.length}`);
 
-  // Don't interrupt if we're already moving or escaping
-  if (!manualMode && !moveIntervalId && !alignIntervalId && !escapeMode) {
+  // Only re-evaluate if we're not escaping or moving
+  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+    console.log("💥 Bomb exploded, re-evaluating...")
     makeDecision() // Re-evaluate decision after an explosion
+  } else if (escapeMode) {
+    console.log("🏃 Escape in progress, ignoring bomb explosion event")
   }
 })
 
@@ -252,8 +316,12 @@ socket.on("chest_destroyed", (chest) => {
   }
 
   currentState.map[chestY][chestX] = item
-  if (!manualMode) {
+  // Only re-evaluate if we're not escaping or moving
+  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+    console.log("🧱 Chest destroyed, re-evaluating...")
     makeDecision() // Re-evaluate decision after a chest is destroyed
+  } else if (escapeMode) {
+    console.log("🏃 Escape in progress, ignoring chest destroyed event")
   }
 })
 
@@ -269,8 +337,12 @@ socket.on("item_collected", (data) => {
   }
 
   // TODO: Could also update bomber's attributes if needed
-  if (!manualMode) {
+  // Only re-evaluate if we're not escaping or moving
+  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+    console.log("✨ Item collected, re-evaluating...")
     makeDecision() // Re-evaluate decision after an item is collected
+  } else if (escapeMode) {
+    console.log("🏃 Escape in progress, ignoring item collected event")
   }
 })
 
@@ -354,22 +426,28 @@ const smoothMove = (direction, isEscapeMove = false) => {
       if (escapeMode && escapePath.length > 0) {
         const nextMove = escapePath.shift()
         console.log(`🏃 Continuing escape: ${nextMove} (${escapePath.length} steps remaining)`)
-        smoothMove(nextMove, true)
+        // Small delay between escape moves to ensure position updates
+        setTimeout(() => {
+          smoothMove(nextMove, true)
+        }, 50)
       } else {
         // Escape complete or normal move done
         if (escapeMode) {
           console.log(`✅ Escape sequence completed!`)
           escapeMode = false
           escapePath = []
-          console.log(`   ⏸️ Waiting before next decision to let bombs explode...`)
-          // Wait longer to let bombs explode before re-evaluating
+          console.log(`   ⏸️  Waiting before next decision to ensure safety...`)
+          // Wait for bombs to explode before re-evaluating
           setTimeout(() => {
             console.log(`   🔍 Re-evaluating safety after escape...`)
             makeDecision()
-          }, 1000) // 1 second delay to let bombs explode
+          }, 1000) // 1 second delay
           return // Don't call makeDecision immediately
         }
-        makeDecision()
+        // Normal move completed, make new decision
+        setTimeout(() => {
+          makeDecision()
+        }, 100) // Small delay to let position update
       }
     }
   }, STEP_DELAY)
@@ -387,19 +465,16 @@ function makeDecision() {
   console.log(`Start decision making...`)
   if (!currentState || !myUid) return
 
-  // If in escape mode, don't interrupt - let escape sequence complete
-  if (escapeMode && (moveIntervalId || alignIntervalId)) {
-    console.log(`🏃 Escape in progress... (${escapePath.length} steps remaining)`)
+  // CRITICAL: If in escape mode, NEVER interrupt - let escape sequence complete
+  if (escapeMode) {
+    console.log(`🏃 ESCAPE MODE ACTIVE - Skipping decision (${escapePath.length} steps remaining)`)
     return
   }
 
-  // Don't make new decisions if a move is already in progress (unless canceling it)
+  // Don't make new decisions if a move is already in progress
   if (moveIntervalId || alignIntervalId) {
-    console.log("⏸️  Move in progress, canceling to make new decision")
-    clearInterval(moveIntervalId)
-    moveIntervalId = null
-    clearInterval(alignIntervalId)
-    alignIntervalId = null
+    console.log("⏸️  Move in progress, skipping decision")
+    return
   }
 
   const myBomber = currentState.bombers.find((b) => b.uid === myUid)
