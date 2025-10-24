@@ -220,46 +220,29 @@ socket.on("user", (state) => {
 })
 
 socket.on("player_move", (data) => {
-  if (!currentState) return
-
-  // Only track movement for OUR bomber
-  if (data.uid !== myUid) {
-    return
-  }
+  if (!currentState || !data.uid) return
 
   const bomberGridX = Math.floor(data.x / GRID_SIZE)
   const bomberGridY = Math.floor(data.y / GRID_SIZE)
 
   // Check ALL bombs to see if we moved away from any of them
-  bombTracking.forEach((bombInfo, bombId) => {
-    const hasMovedAway = bomberGridX !== bombInfo.gridX || bomberGridY !== bombInfo.gridY
-    if (hasMovedAway) {
-      // Find the bomb in currentState and update its flag
-      const bomb = currentState.bombs.find((b) => b.id === bombId)
-      if (bomb && !bomb.bomberPassedThrough) {
-        bomb.bomberPassedThrough = true
-        console.log(`   🚶 We left bomb ${bombId} at [${bombInfo.gridX}, ${bombInfo.gridY}]`)
+  if (data.uid === myUid) {
+    bombTracking.forEach((bombInfo, bombId) => {
+      const hasMovedAway = bomberGridX !== bombInfo.gridX || bomberGridY !== bombInfo.gridY
+      if (hasMovedAway) {
+        // Find the bomb in currentState and update its flag
+        const bomb = currentState.bombs.find((b) => b.id === bombId)
+        if (bomb && !bomb.bomberPassedThrough) {
+          bomb.bomberPassedThrough = true
+          console.log(`   🚶 We left bomb ${bombId} at [${bombInfo.gridX}, ${bombInfo.gridY}]`)
+        }
       }
-    }
-  })
+    })
+  }
 
   // Update OUR bomber's position in state
   const bomberIndex = currentState.bombers.findIndex((b) => b.uid === data.uid)
-  if (bomberIndex !== -1) {
-    currentState.bombers[bomberIndex] = data
-
-    // Sync global speed with server data
-    if (data.speed !== undefined && data.speed !== speed) {
-      speed = data.speed
-      console.log(`⚡ Speed synced: ${speed}`)
-    }
-    // Log position updates for debugging
-    // console.log(
-    //   `🔄 Position updated: [${Math.floor(data.x / GRID_SIZE)}, ${Math.floor(
-    //     data.y / GRID_SIZE
-    //   )}] | Pixel: [${data.x}, ${data.y}]`
-    // );
-  }
+  if (bomberIndex !== -1) currentState.bombers[bomberIndex] = data
 })
 
 socket.on("new_bomb", (bomb) => {

@@ -21,4 +21,4 @@ export const ITEM_VALUES = {
   B: 2.0, // Bomb Count - valuable for offensive play
 }
 
-export const ITEM_PRIORITY_BIAS = 2 // Bot will prefer items if path is 2 steps longer than chest
+export const ITEM_PRIORITY_BIAS = 3 // Bot will prefer items if path is 3 steps longer than chest

@@ -186,6 +186,21 @@ function findAllChests(map, bombs, allBombers) {
 }
 
 /**
+ * Find enemy bombers (alive, not me) and return their grid positions
+ */
+function findAllEnemies(map, bombs, allBombers, myUid) {
+  const enemies = []
+  for (const b of allBombers) {
+    if (!b.isAlive) continue
+    if (b.uid === myUid) continue
+    const ex = Math.floor(b.x / GRID_SIZE)
+    const ey = Math.floor(b.y / GRID_SIZE)
+    enemies.push({ x: ex, y: ey, bomber: b })
+  }
+  return enemies
+}
+
+/**
  * A unified BFS that finds the best path to a target, avoiding active bomb zones
  * and keeping track of breakable chests in the way.
  */
@@ -352,7 +367,7 @@ function handleTarget(result, state, myUid) {
   // Filter out exploded bombs
   const activeBombs = bombs.filter((b) => !b.isExploded)
 
-  const myBomber = bombers?.find((b) => b.uid === myUid)
+  const myBomber = bombers && bombers.find((b) => b.uid === myUid)
   const player = {
     x: Math.floor(myBomber.x / 40),
     y: Math.floor(myBomber.y / 40),
@@ -442,7 +457,7 @@ function handleTarget(result, state, myUid) {
 
 export function decideNextAction(state, myUid) {
   const { map, bombs = [], bombers } = state
-  const myBomber = bombers?.find((b) => b.uid === myUid)
+  const myBomber = bombers && bombers.find((b) => b.uid === myUid)
 
   // console.log("\n" + "=".repeat(90));
   // console.log("🤖 BOT DECISION CYCLE STARTED");
@@ -857,6 +872,136 @@ export function decideNextAction(state, myUid) {
   // 5️⃣ No targets found, explore
   console.log(`\n🔍 PHASE 6: Exploration Mode`)
   console.log(`   Safe exploration tiles: ${safeTiles.length}`)
+
+  // -------------------------------
+  // Enemy pursuit / kill logic
+  // If an enemy bomber is reachable and we can bomb them (and escape), prioritize that
+  // -------------------------------
+  console.log(`\n🔍 PHASE 5.5: Enemy Pursuit`) // numbering keeps log order readable
+  const enemies = findAllEnemies(map, activeBombs, bombers, myUid)
+  console.log(`   Enemies found: ${enemies.length}`)
+
+  // Helper: check if a bomb placed at (bx,by) will hit enemy at (ex,ey)
+  function willBombHitEnemy(bx, by, ex, ey, map, range) {
+    if (bx === ex && by === ey) return true
+    // check four directions
+    for (const [dx, dy] of DIRS) {
+      for (let step = 1; step <= range; step++) {
+        const nx = bx + dx * step
+        const ny = by + dy * step
+        if (nx < 0 || ny < 0 || ny >= map.length || nx >= map[0].length) break
+        if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
+        if (nx === ex && ny === ey) return true
+      }
+    }
+    return false
+  }
+
+  if (enemies.length > 0) {
+    for (const enemy of enemies) {
+      // If enemy is adjacent to us right now, consider immediate bomb
+      const dx = Math.abs(enemy.x - player.x)
+      const dy = Math.abs(enemy.y - player.y)
+
+      // If enemy adjacent and we have a bomb, evaluate bombing now
+      if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
+        console.log(`   Enemy adjacent at [${enemy.x},${enemy.y}]`) 
+        if (myBomber.bombCount) {
+          // Will our bomb (placed at our current tile) reach enemy?
+          const willHit = willBombHitEnemy(player.x, player.y, enemy.x, enemy.y, map, myBomber.explosionRange)
+          if (willHit) {
+            const futureBombs = [
+              ...activeBombs,
+              {
+                x: player.x * GRID_SIZE,
+                y: player.y * GRID_SIZE,
+                explosionRange: myBomber.explosionRange,
+                uid: myBomber.uid,
+              },
+            ]
+
+            const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+            if (futureSafeTiles.length > 0) {
+              const escapePath = findBestPath(map, player, futureSafeTiles, futureBombs, bombers, myUid, true)
+              if (escapePath && escapePath.path.length > 0) {
+                console.log(`   ✅ Can bomb enemy and escape: bomb + ${escapePath.path.join(' → ')}`)
+                return {
+                  action: 'BOMB',
+                  isEscape: true,
+                  escapeAction: escapePath.path[0],
+                  fullPath: escapePath.path,
+                }
+              }
+            }
+          } else {
+            console.log('   ⚠️ Bomb here would not reach enemy')
+          }
+        } else {
+          console.log('   ⚠️ No bombs available to attack')
+        }
+      }
+
+      // Otherwise, try to path to a walkable tile adjacent to the enemy
+      const adjacentTargets = []
+      for (const [adx, ady] of DIRS) {
+        const tx = enemy.x + adx
+        const ty = enemy.y + ady
+        if (map[ty] && WALKABLE.includes(map[ty][tx])) {
+          // Skip tiles with active bombs
+          const hasBomb = activeBombs.some((b) => Math.floor(b.x / GRID_SIZE) === tx && Math.floor(b.y / GRID_SIZE) === ty)
+          if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
+        }
+      }
+
+      if (adjacentTargets.length > 0) {
+        const pathToAdj = findBestPath(map, player, adjacentTargets, activeBombs, bombers, myUid)
+        if (pathToAdj && pathToAdj.path.length > 0) {
+          // If we can reach adjacent tile AND have a bomb, check that bombing from that tile will hit the enemy and we can escape
+          if (myBomber.bombCount) {
+            // Simulate placing bomb at the final tile in path (where we'd stand to place)
+            const finalPos = (() => {
+              // Walk through path to compute final grid pos
+              let fx = player.x
+              let fy = player.y
+              for (const step of pathToAdj.path) {
+                if (step === 'LEFT') fx -= 1
+                if (step === 'RIGHT') fx += 1
+                if (step === 'UP') fy -= 1
+                if (step === 'DOWN') fy += 1
+              }
+              return { x: fx, y: fy }
+            })()
+
+            const willHit = willBombHitEnemy(finalPos.x, finalPos.y, enemy.x, enemy.y, map, myBomber.explosionRange)
+            if (willHit) {
+              const futureBombs = [
+                ...activeBombs,
+                { x: finalPos.x * GRID_SIZE, y: finalPos.y * GRID_SIZE, explosionRange: myBomber.explosionRange, uid: myBomber.uid },
+              ]
+              const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+              if (futureSafeTiles.length > 0) {
+                const escapePath = findBestPath(map, finalPos, futureSafeTiles, futureBombs, bombers, myUid, true)
+                if (escapePath && escapePath.path.length > 0) {
+                  console.log(`   ✅ Plan: move to enemy-adjacent tile and BOMB+ESCAPE (path: ${pathToAdj.path.join(' → ')})`)
+                  // If we're already next step towards that tile, move
+                  if (pathToAdj.path.length > 0) {
+                    console.log('   🎯 DECISION: MOVE (towards enemy)')
+                    trackDecision(player, pathToAdj.path[0])
+                    return { action: pathToAdj.path[0] }
+                  }
+                }
+              }
+            }
+          } else {
+            // No bombs but we can still try to chase
+            console.log('   ⚠️ No bombs available, chasing enemy')
+            trackDecision(player, pathToAdj.path[0])
+            return { action: pathToAdj.path[0] }
+          }
+        }
+      }
+    }
+  }
 
   if (safeTiles.length > 0) {
     const explorePath = findBestPath(map, player, safeTiles, activeBombs, bombers, myUid)
