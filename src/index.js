@@ -1,11 +1,11 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
-import { decideNextAction } from "./bot/bomberman_beam_agent.js"
-import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "./constants/index.js"
+import { decideNextAction } from "./bot/agent.js"
+import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "./utils/constants.js"
 import readline from "readline"
 
 // Import utility functions for escape path validation
-import { findUnsafeTiles } from "./bot/bomberman_beam_agent.js"
+import { findUnsafeTiles } from "./bot/agent.js"
 
 const socket = socketManager.getSocket()
 const offset = (GRID_SIZE - BOT_SIZE) / 2

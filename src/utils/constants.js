@@ -10,6 +10,7 @@ export const DIRS = [
   [1, 0, "RIGHT"],
 ]
 
+export const ITEMS = ["B", "R", "S"]
 export const WALKABLE = [null, "B", "R", "S"]
 export const BREAKABLE = ["C"]
 export const BLOCKABLE_EXPLOSION = ["W", "C", "B", "R", "S"]
@@ -21,4 +22,4 @@ export const ITEM_VALUES = {
   B: 2.0, // Bomb Count - valuable for offensive play
 }
 
-export const ITEM_PRIORITY_BIAS = 3 // Bot will prefer items if path is 3 steps longer than chest
+export const ITEM_PRIORITY_BIAS = 5 // Bot will prefer items if path is 5 steps longer than chest
