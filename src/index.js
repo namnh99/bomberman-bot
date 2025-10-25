@@ -1,7 +1,7 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
 import { decideNextAction } from "./bot/agent.js"
-import { STEP_DELAY, GRID_SIZE, BOT_SIZE, ITEMS } from "./utils/constants.js"
+import { STEP_DELAY, GRID_SIZE, BOT_SIZE, ITEMS, WALKABLE } from "./utils/constants.js"
 import readline from "readline"
 
 // Import utility functions for escape path validation
@@ -19,10 +19,6 @@ let escapeMode = false
 let escapePath = []
 let manualMode = false
 let useSmootMovesInManual = true
-
-// Follow arbitrary full path (not only escape)
-let followMode = false
-let followPath = []
 
 // Track bomb positions for walkable detection
 // Map of "bombId" -> { gridX, gridY, bomberUid }
@@ -170,6 +166,17 @@ function setupManualControl() {
   })
 }
 
+function forceClearIntervals() {
+  if (moveIntervalId) {
+    clearInterval(moveIntervalId)
+    moveIntervalId = null
+  }
+  if (alignIntervalId) {
+    clearInterval(alignIntervalId)
+    alignIntervalId = null
+  }
+}
+
 // ==================== SOCKET EVENTS ====================
 
 socket.on("connect", () => {
@@ -214,9 +221,9 @@ socket.on("player_move", (data) => {
 
 socket.on("new_bomb", (bomb) => {
   if (!currentState) return
-  console.log(
-    `💣 New bomb placed at [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}] | id: ${bomb.id}`,
-  )
+  // console.log(
+  //   `💣 New bomb placed at [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}] | id: ${bomb.id}`,
+  // )
 
   const myBomber = currentState.bombers.find((b) => b.uid === myUid)
   const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
@@ -273,14 +280,7 @@ socket.on("new_bomb", (bomb) => {
         // Cancel current escape
         escapeMode = false
         escapePath = []
-        if (moveIntervalId) {
-          clearInterval(moveIntervalId)
-          moveIntervalId = null
-        }
-        if (alignIntervalId) {
-          clearInterval(alignIntervalId)
-          alignIntervalId = null
-        }
+        forceClearIntervals()
         // Immediately find new escape route
         makeDecision()
       } else {
@@ -292,9 +292,6 @@ socket.on("new_bomb", (bomb) => {
     const isOurBomb = bomb.uid === myUid
     if (!isOurBomb) {
       console.log("🔔 Enemy bomb detected, re-evaluating...")
-      // Abort any follow path since the world changed
-      followMode = false
-      followPath = []
       makeDecision()
     } else {
       console.log("💣 Our bomb placed, waiting for escape sequence to start...")
@@ -338,26 +335,31 @@ socket.on("item_collected", (data) => {
   const { x: itemX, y: itemY } = toGridCoords(data.item.x, data.item.y)
   currentState.map[itemY][itemX] = null
 
-  const index = currentState.bombers.findIndex(
-    (b) => b?.uid === data.bomber?.uid && b?.uid === myUid,
-  )
-  if (index !== -1) currentState.bombers[index] = data.bomber
+  const bomber = currentState.bombers.find((b) => b?.uid === data.bomber?.uid && b?.uid === myUid)
+  if (bomber) {
+    const { speed, explosionRange, bombCount } = data
+    bomber.speed = speed || bomber.speed
+    bomber.explosionRange = explosionRange || bomber.explosionRange
+    bomber.bombCount = bombCount || bomber.bombCount
+  }
 
   // TODO: Could also update bomber's attributes if needed
   // Only re-evaluate if we're not escaping or moving
-  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-    console.log("✨ Item collected, re-evaluating...")
-    makeDecision() // Re-evaluate decision after an item is collected
-  } else if (escapeMode) {
-    console.log("🏃 Escape in progress, ignoring item collected event")
-  }
+  // if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+  //   console.log("✨ Item collected, re-evaluating...")
+  //   makeDecision() // Re-evaluate decision after an item is collected
+  // } else if (escapeMode) {
+  //   console.log("🏃 Escape in progress, ignoring item collected event")
+  // }
 })
 
 socket.on("map_update", (data) => {
   if (!currentState) return
   currentState.chests = data.chests
   currentState.items = data.items
-  // makeDecision(); // Re-evaluate decision after map update
+  // if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
+  //   makeDecision()
+  // }
 })
 
 // ==================== ACTION HELPERS ====================
@@ -446,7 +448,7 @@ const smoothMove = async (direction, isEscapeMove = false) => {
     return
   }
 
-  await alignToGrid(direction, myBomber)
+  // await alignToGrid(direction, myBomber)
 
   const { x: currentX, y: currentY } = toGridCoords(myBomber.x, myBomber.y)
   let nextGridX = currentX
@@ -467,13 +469,10 @@ const smoothMove = async (direction, isEscapeMove = false) => {
       break
   }
 
-  console.log(
-    `🚶 Starting smooth move ${direction} from [${currentX}, ${currentY}] to [${nextGridX}, ${nextGridY}]`,
-  )
+  const targetPixelX = nextGridX * GRID_SIZE + offset
+  const targetPixelY = nextGridY * GRID_SIZE + offset
 
   moveIntervalId = setInterval(() => {
-    const targetPixelX = nextGridX * GRID_SIZE + offset
-    const targetPixelY = nextGridY * GRID_SIZE + offset
     const currentPixelX = myBomber.x
     const currentPixelY = myBomber.y
 
@@ -482,7 +481,7 @@ const smoothMove = async (direction, isEscapeMove = false) => {
         ? Math.abs(currentPixelY - targetPixelY)
         : Math.abs(currentPixelX - targetPixelX)
 
-    if (distanceToTarget <= myBomber.speed) {
+    if (distanceToTarget <= offset) {
       clearInterval(moveIntervalId)
       moveIntervalId = null
       console.log(`✅ Move complete: ${direction}`)
@@ -508,21 +507,7 @@ const smoothMove = async (direction, isEscapeMove = false) => {
           }, GRID_SIZE / myBomber.speed)
           return // Don't call makeDecision immediately
         }
-        // If we are following a provided fullPath (general follow, not escape)
-        if (followMode && followPath.length > 0) {
-          const nextMove = followPath.shift()
-          console.log(`➡️ Following path: ${nextMove} (${followPath.length} steps remaining)`)
-          // continue following without re-evaluating agent until path ends
-          setTimeout(() => smoothMove(nextMove, false), 50)
-          return
-        }
 
-        // If followMode finished, clear and re-evaluate
-        if (followMode && followPath.length === 0) {
-          followMode = false
-          followPath = []
-          console.log("✅ Follow path completed")
-        }
         // Normal move completed, make new decision
         setTimeout(() => {
           makeDecision()
@@ -561,10 +546,10 @@ function makeDecision() {
   }
 
   // Don't make new decisions if a move is already in progress
-  // if (moveIntervalId || alignIntervalId) {
-  //   console.log("⏸️  Move in progress, skipping decision")
-  //   return
-  // }
+  if (moveIntervalId || alignIntervalId) {
+    console.log("⏸️  Move in progress, skipping decision")
+    return
+  }
 
   const myBomber = currentState.bombers.find((b) => b.uid === myUid)
   if (!myBomber) return
@@ -620,12 +605,6 @@ function makeDecision() {
     }
 
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(action)) {
-      // If the agent provided a fullPath, enable followMode so client continues the path
-      if (fullPath && Array.isArray(fullPath) && fullPath.length > 0) {
-        // consume first step (already returned as action) and keep the remainder
-        followPath = fullPath.slice(1)
-        followMode = true
-      }
       // Align to grid if not already aligned before moving
       smoothMove(action)
     } else if (action === "STAY") {

@@ -40,12 +40,46 @@ import {
 let lastPosition = null
 let lastDecision = null
 let decisionCount = 0
-let recentPositions = []
 
 function trackDecision(player, action) {
   const key = posKey(player.x, player.y)
   lastPosition = key
   lastDecision = action
+}
+
+// Prevent immediate backtracking: if action would move back to lastPosition,
+// try to pick an alternative walkable direction. Returns a direction string or "STAY".
+function applyBacktrackGuard(action, player, map, bombs, bombers) {
+  const dirsToNames = { LEFT: [-1, 0], RIGHT: [1, 0], UP: [0, -1], DOWN: [0, 1] }
+  if (!action || !dirsToNames[action]) return action
+  if (!lastPosition) return action
+
+  const [dx, dy] = dirsToNames[action]
+  const tx = player.x + dx
+  const ty = player.y + dy
+  if (posKey(tx, ty) !== lastPosition) return action
+
+  // This action would backtrack. Try alternatives (prefer same priority order)
+  for (const dir of ["UP", "RIGHT", "DOWN", "LEFT"]) {
+    if (dir === action) continue
+    const [adx, ady] = dirsToNames[dir]
+    const nx = player.x + adx
+    const ny = player.y + ady
+    // bounds and walkable check
+    if (!inBounds(nx, ny, map)) continue
+    if (!WALKABLE.includes(map[ny][nx])) continue
+    // ensure no active bomb occupying the tile (unless walkable bomb flag true)
+    const hasBomb = bombs.some((b) => {
+      const { x, y } = toGridCoords(b.x, b.y)
+      return x === nx && y === ny && !b.walkable
+    })
+    if (hasBomb) continue
+    // avoid moving back to lastPosition
+    if (posKey(nx, ny) === lastPosition) continue
+    return dir
+  }
+
+  return "STAY"
 }
 
 /**
@@ -121,7 +155,7 @@ function handleTarget(result, state, myUid) {
           console.log("   🏃 Escape action:", escapePath.path[0])
           console.log("=".repeat(60) + "\n")
 
-          if (myBomber.bombCount) {
+          if (myBomber.bombCount > 0) {
             return {
               action: "BOMB",
               escapeAction: escapePath.path[0],
@@ -174,25 +208,27 @@ export function decideNextAction(state, myUid) {
   const player = toGridCoords(myBomber.x, myBomber.y)
 
   // --- Push current position into short history (keep last 4) ---
-  const currentPosKeyForHistory = posKey(player.x, player.y)
-  recentPositions.push(currentPosKeyForHistory)
-  if (recentPositions.length > 4) recentPositions.shift()
+  // const currentPosKeyForHistory = posKey(player.x, player.y)
+  // recentPositions.push(currentPosKeyForHistory)
+  // if (recentPositions.length > 4) recentPositions.shift()
 
-  // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
-  if (
-    recentPositions.length === 4 &&
-    recentPositions[0] === recentPositions[2] &&
-    recentPositions[1] === recentPositions[3] &&
-    recentPositions[0] !== recentPositions[1]
-  ) {
-    console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
-    recentPositions = [] // reset history so we don't continuously trigger
-    if (lastDecision) {
-      console.log(`   Returning previous decision to commit: ${lastDecision}`)
-      return { action: lastDecision }
-    }
-    return { action: "STAY" }
-  }
+  // // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
+  // if (
+  //   recentPositions.length === 4 &&
+  //   recentPositions[0] === recentPositions[2] &&
+  //   recentPositions[1] === recentPositions[3] &&
+  //   recentPositions[0] !== recentPositions[1]
+  // ) {
+  //   console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
+  //   recentPositions = [] // reset history so we don't continuously trigger
+  //   if (lastDecision) {
+  //     console.log(`   Returning previous decision to commit: ${lastDecision}`)
+  //     const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
+  //     console.log(`   Guarded decision: ${guarded}`)
+  //     return { action: guarded }
+  //   }
+  //   return { action: "STAY" }
+  // }
 
   // Anti-oscillation check
   const currentPosKey = posKey(player.x, player.y)
@@ -202,7 +238,9 @@ export function decideNextAction(state, myUid) {
       // Keep the same decision to commit to the path
       lastPosition = null
       decisionCount = 0
-      return { action: lastDecision }
+      const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
+      console.log(`⚠️ OSCILLATION detected — guarded commit: ${guarded}`)
+      return { action: guarded }
     }
   } else {
     decisionCount = 0
@@ -443,7 +481,7 @@ export function decideNextAction(state, myUid) {
         return { action: "STAY" }
       }
 
-      if (myBomber.bombCount) {
+      if (myBomber.bombCount > 0) {
         const itemCheck = checkBombWouldDestroyItems(
           player.x,
           player.y,
@@ -635,7 +673,7 @@ export function decideNextAction(state, myUid) {
       if (isAdjacent(enemy.x, enemy.y, player.x, player.y)) {
         console.log(`   Enemy adjacent at [${enemy.x},${enemy.y}]`)
 
-        if (myBomber.bombCount) {
+        if (myBomber.bombCount > 0) {
           const itemCheck = checkBombWouldDestroyItems(
             player.x,
             player.y,
@@ -720,7 +758,7 @@ export function decideNextAction(state, myUid) {
       if (adjacentTargets.length > 0) {
         const pathToAdj = findBestPath(map, player, adjacentTargets, bombs, bombers, myUid)
         if (pathToAdj && pathToAdj.path.length > 0) {
-          if (myBomber.bombCount) {
+          if (myBomber.bombCount > 0) {
             let fx = player.x
             let fy = player.y
             for (const step of pathToAdj.path) {
