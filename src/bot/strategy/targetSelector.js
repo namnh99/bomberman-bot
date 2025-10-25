@@ -63,10 +63,8 @@ export function findAllEnemies(map, bombs, allBombers, myUid) {
 export function checkBombWouldDestroyItems(bx, by, map, range) {
   const affectedItems = []
 
-  // Check bomb tile itself
-  if (map[by] && ITEMS.includes(map[by][bx])) {
-    affectedItems.push({ x: bx, y: by, type: map[by][bx] })
-  }
+  // SKIP bomb tile itself - bot will collect the item before bomb explodes
+  // Only check items in explosion RANGE (not at bomb position)
 
   // Check explosion range in all 4 directions
   for (const [dx, dy] of DIRS) {

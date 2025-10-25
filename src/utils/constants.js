@@ -1,5 +1,5 @@
 export const GRID_SIZE = 40
-export const STEP_DELAY = 20 // time tick on the server
+export const STEP_DELAY = 17 // time tick on the server
 export const BOT_SIZE = 35
 export const BOMB_EXPLOSION_TIME = 5000 // Bombs explode after 5 seconds (5000ms)
 export const OSCILLATION_THRESHOLD = 2
@@ -23,4 +23,7 @@ export const ITEM_VALUES = {
   B: 2.0, // Bomb Count - valuable for offensive play
 }
 
-export const ITEM_PRIORITY_BIAS = 5 // Bot will prefer items if path is 5 steps longer than chest
+export const MAP_HEIGHT = 16
+export const MAP_WIDTH = 16
+
+export const ITEM_PRIORITY_BIAS = 10 // Bot will prefer items if path is 10 steps longer than chest

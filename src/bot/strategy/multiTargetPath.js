@@ -80,19 +80,6 @@ function findNearestUnvisitedTarget(pos, targets, visited) {
 }
 
 /**
- * Find multi-target path optimized for items
- * Prioritizes high-value items first
- */
-export function findOptimalItemPath(startPos, items, map, bombs, bombers, myUid, maxItems = 3) {
-  if (!items || items.length === 0) return null
-
-  // Sort items by value (descending)
-  const sortedItems = [...items].sort((a, b) => (b.value || 1) - (a.value || 1))
-
-  return findMultiTargetPath(startPos, sortedItems, map, bombs, bombers, myUid, maxItems)
-}
-
-/**
  * Compare single-target vs multi-target strategies
  * Returns best approach
  */

@@ -17,11 +17,7 @@ export {
   determineGamePhase,
 } from "./priorityCalculator.js"
 
-export {
-  predictEnemyPositions,
-  evaluatePathDanger,
-  findPredictiveBombPosition,
-} from "./enemyPredictor.js"
+export { predictEnemyPositions, evaluatePathDanger } from "./enemyPredictor.js"
 
 export {
   calculateChainReactionValue,
@@ -29,33 +25,16 @@ export {
   isChainReactionWorthwhile,
 } from "./chainReaction.js"
 
-export {
-  evaluateZoneControl,
-  findSafeRetreatPosition,
-  isInControlledTerritory,
-} from "./zoneControl.js"
+export { evaluateZoneControl } from "./zoneControl.js"
 
 export {
   scoreEnemyThreat,
   findMostThreateningEnemy,
-  findWeakestEnemy,
   shouldFightOrFlee,
 } from "./threatAssessment.js"
 
-export {
-  validateBombSafety,
-  findBestSafeBombPosition,
-  canSafelyBombCurrentPosition,
-} from "./bombValidator.js"
+export { validateBombSafety } from "./bombValidator.js"
 
-export {
-  findMultiTargetPath,
-  findOptimalItemPath,
-  compareSingleVsMultiTarget,
-} from "./multiTargetPath.js"
+export { findMultiTargetPath, compareSingleVsMultiTarget } from "./multiTargetPath.js"
 
-export {
-  findAdvancedEscapePath,
-  detectBombChains,
-  findChainSafePosition,
-} from "./advancedEscape.js"
+export { findAdvancedEscapePath, detectBombChains } from "./advancedEscape.js"

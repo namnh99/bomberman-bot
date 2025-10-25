@@ -6,6 +6,12 @@ import { wouldMoveTrapUs } from "../pathfinding/riskEvaluator.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
 import { findAdvancedEscapePath, detectBombChains } from "./advancedEscape.js"
 
+// Escape reversal protection: avoid ping-pong between two tiles
+let lastEscapeFrom = null
+let lastEscapeTo = null
+let lastEscapeTime = 0
+const ESCAPE_REVERSAL_COOLDOWN_MS = 2000
+
 /**
  * Try to escape from danger using advanced multi-bomb analysis
  */
@@ -36,6 +42,75 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   const escapeResult = findShortestEscapePath(map, player, bombs, bombers, myBomber)
 
   if (escapeResult && escapeResult.path.length > 0) {
+    // ===== ESCAPE REVERSAL PROTECTION =====
+    // Check if this escape would immediately reverse our last escape (A->B then B->A)
+    const now = Date.now()
+    const currentPos = posKey(player.x, player.y)
+    const targetPos = posKey(escapeResult.target.x, escapeResult.target.y)
+
+    if (
+      lastEscapeFrom &&
+      lastEscapeTo &&
+      currentPos === lastEscapeTo &&
+      targetPos === lastEscapeFrom &&
+      now - lastEscapeTime < ESCAPE_REVERSAL_COOLDOWN_MS
+    ) {
+      console.log(
+        `   ⚠️ Detected immediate escape reversal attempt — suppressing to avoid ping-pong`,
+      )
+      console.log(
+        `   Last escape: ${lastEscapeFrom} -> ${lastEscapeTo}, attempting: ${currentPos} -> ${targetPos}`,
+      )
+
+      // Try to find a DIFFERENT safe tile (not the reversal target)
+      const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
+      const otherSafeTiles = safeTiles.filter(
+        (t) => posKey(t.x, t.y) !== lastEscapeFrom && posKey(t.x, t.y) !== currentPos,
+      )
+
+      if (otherSafeTiles.length > 0) {
+        console.log(`   🔍 Trying ${otherSafeTiles.length} alternative safe tiles...`)
+        const altPath = findBestPath(map, player, otherSafeTiles, bombs, bombers, myUid, true)
+        if (altPath && altPath.path.length > 0) {
+          console.log(`   ✅ Found alternative escape: ${altPath.path.join(" → ")}`)
+
+          // Calculate target position from first move
+          const altTargetPos = posKey(
+            altPath.path[0] === "LEFT"
+              ? player.x - 1
+              : altPath.path[0] === "RIGHT"
+                ? player.x + 1
+                : player.x,
+            altPath.path[0] === "UP"
+              ? player.y - 1
+              : altPath.path[0] === "DOWN"
+                ? player.y + 1
+                : player.y,
+          )
+
+          // Record this escape
+          lastEscapeFrom = currentPos
+          lastEscapeTo = altTargetPos
+          lastEscapeTime = now
+
+          console.log("🎯 DECISION: ESCAPE (alternative to avoid reversal)")
+          console.log("   Action:", altPath.path[0])
+          console.log("=".repeat(90) + "\n")
+
+          return {
+            action: altPath.path[0],
+            isEscape: true,
+            fullPath: altPath.path,
+          }
+        }
+      }
+
+      // If no alternative, try emergency escape
+      console.log(`   ⚠️ No alternative escape found - trying emergency escape`)
+      return attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
+    }
+    // ===== END REVERSAL PROTECTION =====
+
     // Validate the first move doesn't trap us
     const firstMovePos = getNextPosition(player, escapeResult.path[0])
     const wouldTrap = wouldMoveTrapUs(player, firstMovePos, map, bombs, [])
@@ -51,6 +126,11 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
     console.log("🎯 DECISION: ESCAPE (shortest path to safety)")
     console.log("   Action:", escapeResult.path[0])
     console.log("=".repeat(90) + "\n")
+
+    // Record this escape to detect future reversals
+    lastEscapeFrom = currentPos
+    lastEscapeTo = targetPos
+    lastEscapeTime = now
 
     return {
       action: escapeResult.path[0],

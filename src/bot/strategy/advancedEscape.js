@@ -2,6 +2,7 @@ import { findSafeTiles } from "../pathfinding/dangerMap.js"
 import { calculateDangerTimeline, findSafestTimedPath } from "../pathfinding/timingAnalyzer.js"
 import { manhattanDistance, posKey } from "../../utils/gridUtils.js"
 import { DIRS } from "../../utils/constants.js"
+import { findBestPath } from "../pathfinding/index.js"
 
 /**
  * Advanced escape strategy for multi-bomb scenarios
@@ -89,7 +90,17 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
     }
   }
 
+  // For simpler scenarios (< 3 bombs), find direct path to best safe tile
+  const pathResult = findBestPath(map, player, [bestTile.tile], bombs, allBombers)
+
+  if (!pathResult || !pathResult.path || pathResult.path.length === 0) {
+    console.log(`   ⚠️ No path found to best safe tile`)
+    return null
+  }
+
+  console.log(`   ✅ Direct path to safety: ${pathResult.path.join(" → ")}`)
   return {
+    path: pathResult.path,
     target: bestTile.tile,
     distance: bestTile.distance,
     strategy: "nearest_safe",
@@ -99,6 +110,7 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
 /**
  * Detect if we're in a bomb chain scenario
  * Returns bombs that will trigger chain reactions
+ * INTERNAL HELPER - Not exported
  */
 export function detectBombChains(bombs, allBombers, map) {
   const chains = []
@@ -163,8 +175,9 @@ function checkBombTrigger(bomb1, bomb2, allBombers, map) {
 /**
  * Find safe waiting position during chain reactions
  * Returns position that's safe from entire chain
+ * INTERNAL HELPER - Not exported
  */
-export function findChainSafePosition(player, chains, bombs, map, allBombers, myBomber) {
+function findChainSafePosition(player, chains, bombs, map, allBombers, myBomber) {
   if (chains.length === 0) return null
 
   const safeTiles = findSafeTiles(map, bombs, allBombers, myBomber)

@@ -10,8 +10,6 @@ export function calculateDangerTimeline(bombs, allBombers, map) {
   const now = Date.now()
 
   for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner?.explosionRange || 2
     const { x: bx, y: by } = toGridCoords(bomb.x, bomb.y)

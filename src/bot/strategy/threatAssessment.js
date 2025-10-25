@@ -87,38 +87,6 @@ export function findMostThreateningEnemy(enemies, myBomber, myPos) {
 }
 
 /**
- * Find weakest enemy (best target for engagement)
- */
-export function findWeakestEnemy(enemies, myBomber, myPos) {
-  let minPower = Infinity
-  let weakest = null
-
-  for (const enemy of enemies) {
-    const { bomber } = enemy
-    if (!bomber || !bomber.isAlive) continue
-
-    const distance = manhattanDistance(myPos.x, myPos.y, enemy.x, enemy.y)
-    if (distance > 10) continue // Too far
-
-    const enemyPower = (bomber.bombCount || 1) * (bomber.explosionRange || 1)
-    const myPower = (myBomber.bombCount || 1) * (myBomber.explosionRange || 1)
-
-    // Only consider weaker enemies
-    if (enemyPower < myPower && enemyPower < minPower) {
-      minPower = enemyPower
-      weakest = {
-        enemy,
-        power: enemyPower,
-        distance,
-        canKill: myPower > enemyPower * 1.5,
-      }
-    }
-  }
-
-  return weakest
-}
-
-/**
  * Evaluate if we should fight or flee
  */
 export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {

@@ -1,454 +1,86 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
 import { decideNextAction } from "./bot/agent.js"
-import { STEP_DELAY, GRID_SIZE, BOT_SIZE, ITEMS, WALKABLE } from "./utils/constants.js"
-import readline from "readline"
-
-// Import utility functions for escape path validation
-import { findUnsafeTiles } from "./bot/agent.js"
+import { STEP_DELAY, GRID_SIZE, MAP_WIDTH, MAP_HEIGHT } from "./utils/constants.js"
 import { toGridCoords } from "./utils/gridUtils.js"
 
+// Import helpers
+import {
+  sendMoveCommand,
+  alignToGrid,
+  calculateStuckTimeout,
+  isStuck,
+  calculateMovementTiming,
+} from "./helpers/movement.js"
+import { BombTracker, isWalkable, getBomber } from "./helpers/gameState.js"
+import { PathModeManager } from "./helpers/pathMode.js"
+import { ManualControlManager, setupManualControl } from "./helpers/manualControl.js"
+import { registerSocketHandlers } from "./handlers/socketHandlers.js"
+
+// ==================== INITIALIZATION ====================
+
 const socket = socketManager.getSocket()
-const offset = (GRID_SIZE - BOT_SIZE) / 2
+const offset = (GRID_SIZE - 35) / 2
 
-let currentState = null
-let myUid = null
-let moveIntervalId = null
-let alignIntervalId = null
-let escapeMode = false
-let escapePath = []
-let manualMode = false
-let useSmootMovesInManual = true
-
-// Track bomb positions for walkable detection
-// Map of "bombId" -> { gridX, gridY, bomberUid }
-const bombTracking = new Map()
-
-// ==================== MANUAL CONTROL SETUP ====================
-
-function setupManualControl() {
-  console.log("\n" + "=".repeat(80))
-  console.log("🎮 MANUAL CONTROL ENABLED")
-  console.log("=".repeat(80))
-  console.log("Controls:")
-  console.log("  W / w / ↑ - Move UP")
-  console.log("  S / s / ↓ - Move DOWN")
-  console.log("  A / a / ← - Move LEFT")
-  console.log("  D / d / → - Move RIGHT")
-  console.log("  SPACE / B / b - Place BOMB")
-  console.log("  M / m - Toggle Manual/AI mode")
-  console.log("  T / t - Toggle smooth/step movement (manual mode)")
-  console.log("  Q / q - Quit")
-  console.log("=".repeat(80))
-  console.log(`Current Mode: ${manualMode ? "🎮 MANUAL" : "🤖 AI"}`)
-  console.log(
-    `Movement Type: ${useSmootMovesInManual ? "📏 Smooth (full cell)" : "👣 Step-by-step"}`,
-  )
-  console.log("=".repeat(80) + "\n")
-  console.log("⌨️  Keyboard listener active - press any key to test...")
-
-  // Setup readline for keyboard input
-  readline.emitKeypressEvents(process.stdin)
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(true)
-    console.log("✅ Terminal is in raw mode (keyboard ready)")
-  } else {
-    console.log("⚠️  Warning: Terminal is not TTY - keyboard input may not work")
-  }
-
-  process.stdin.on("keypress", (str, key) => {
-    // Handle Ctrl+C to exit
-    if (key && key.ctrl && key.name === "c") {
-      process.exit()
+// Game context - shared state across all modules
+const gameContext = {
+  currentState: null,
+  myUid: null,
+  moveIntervalId: null,
+  alignIntervalId: null,
+  forceClearIntervals: () => {
+    if (gameContext.moveIntervalId) {
+      clearInterval(gameContext.moveIntervalId)
+      gameContext.moveIntervalId = null
     }
-
-    // Handle quit
-    if (key && key.name === "q") {
-      console.log("\n👋 Quitting...")
-      process.exit()
+    if (gameContext.alignIntervalId) {
+      clearInterval(gameContext.alignIntervalId)
+      gameContext.alignIntervalId = null
     }
-
-    // Need game state for movement commands
-    if (!currentState || !myUid) {
-      console.log("⚠️  Waiting for game state...")
-      return
-    }
-
-    // Ignore keys with ctrl modifier (except Ctrl+C which we handle above)
-    if (key && key.ctrl) {
-      return
-    }
-
-    // Toggle manual/AI mode
-    if (key && key.name === "m") {
-      manualMode = !manualMode
-      console.log(`\n🔄 Mode switched to: ${manualMode ? "🎮 MANUAL CONTROL" : "🤖 AI CONTROL"}\n`)
-      if (!manualMode) {
-        // Switched to AI mode, make a decision
-        makeDecision()
-      }
-      return
-    }
-
-    // Toggle smooth/step movement in manual mode
-    if (key && key.name === "t") {
-      useSmootMovesInManual = !useSmootMovesInManual
-      console.log(
-        `\n🔄 Movement type: ${useSmootMovesInManual ? "📏 Smooth (full cell)" : "👣 Step-by-step"}\n`,
-      )
-      return
-    }
-
-    // Only process movement keys in manual mode
-    if (!manualMode) return
-
-    const myBomber = currentState.bombers.find((b) => b.uid === myUid)
-    if (!myBomber) {
-      console.log("⚠️  Bomber not found in game state")
-      return
-    }
-
-    let action = null
-
-    // Map keys to actions - check both key object and string
-    const keyName = key?.name || str?.toLowerCase()
-
-    switch (keyName) {
-      case "w":
-      case "up":
-        action = "UP"
-        break
-      case "s":
-      case "down":
-        action = "DOWN"
-        break
-      case "a":
-      case "left":
-        action = "LEFT"
-        break
-      case "d":
-      case "right":
-        action = "RIGHT"
-        break
-      case "space":
-      case "b":
-        console.log("💣 Placing bomb (manual)")
-        placeBomb()
-        return
-    }
-
-    if (action) {
-      console.log(`\n🎮 Manual control: ${action}`)
-      console.log(
-        `   Current: [${Math.floor(myBomber.x / GRID_SIZE)}, ${Math.floor(myBomber.y / GRID_SIZE)}] | Pixel: [${myBomber.x}, ${myBomber.y}]`,
-      )
-
-      // Cancel any ongoing AI movements
-      if (moveIntervalId) {
-        clearInterval(moveIntervalId)
-        moveIntervalId = null
-      }
-      if (alignIntervalId) {
-        clearInterval(alignIntervalId)
-        alignIntervalId = null
-      }
-
-      if (useSmootMovesInManual) {
-        // Use smooth movement (full grid cell)
-        console.log(`   📏 Using smooth move (full cell)`)
-        smoothMove(action, false)
-      } else {
-        // Send direct single-step move command
-        console.log(`   👣 Sending single step: ${action}`)
-        move(action)
-      }
-    }
-  })
+  },
 }
 
-function forceClearIntervals() {
-  if (moveIntervalId) {
-    clearInterval(moveIntervalId)
-    moveIntervalId = null
-  }
-  if (alignIntervalId) {
-    clearInterval(alignIntervalId)
-    alignIntervalId = null
-  }
-}
+// Managers
+const bombTracker = new BombTracker()
+const pathModeManager = new PathModeManager()
+const manualControlManager = new ManualControlManager()
 
-// ==================== SOCKET EVENTS ====================
+// ==================== CORE FUNCTIONS ====================
 
-socket.on("connect", () => {
-  console.log("✅ Connected:", socket.id)
-  socket.emit("join", {})
-  myUid = socket.id
-  setupManualControl()
-})
-
-socket.on("user", (state) => {
-  currentState = state
-  // Only make decision if not in manual mode AND not currently escaping
-  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-    makeDecision()
-  }
-})
-
-socket.on("player_move", (data) => {
-  if (!currentState || !data.uid) return
-  const { x: bomberX, y: bomberY } = toGridCoords(data.x, data.y)
-
-  if (data.uid === myUid) {
-    bombTracking.forEach((bombInfo, bombId) => {
-      const hasMovedAway = bomberX !== bombInfo.gridX || bomberY !== bombInfo.gridY
-      if (hasMovedAway) {
-        bombTracking.delete(bombId)
-
-        // Find the bomb in currentState and update its flag
-        const bomb = currentState.bombs.find((b) => b.id === bombId)
-        if (bomb && bomb.walkable) bomb.walkable = false
-      }
-    })
-  }
-
-  // Update bomber's position in state
-  const bomber = currentState.bombers.find((b) => b.uid === data.uid)
-  if (bomber) {
-    bomber.x = data.x
-    bomber.y = data.y
-  }
-})
-
-socket.on("new_bomb", (bomb) => {
-  if (!currentState) return
-  // console.log(
-  //   `💣 New bomb placed at [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}] | id: ${bomb.id}`,
-  // )
-
-  const myBomber = currentState.bombers.find((b) => b.uid === myUid)
-  const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
-
-  // Check if Bot is standing on the bomb tile when it's placed
-  let botOnTheBomb = false
-  if (myBomber) {
-    const { x: myBomberX, y: myBomberY } = toGridCoords(myBomber.x, myBomber.y)
-    botOnTheBomb = myBomberX === bombX && myBomberY === bombY
-  }
-  bomb.walkable = botOnTheBomb
-
-  if (!bombTracking.has(bomb.id) && botOnTheBomb) {
-    bombTracking.set(bomb.id, {
-      gridX: bombX,
-      gridY: bombY,
-      bomberUid: bomb.uid,
-    })
-  }
-  currentState.bombs.push(bomb)
-
-  // CRITICAL: Check if new bomb affects our escape path
-  if (escapeMode && escapePath.length > 0) {
-    console.log(`\n🚨 NEW BOMB during escape! Checking if escape path is still safe...`)
-
-    const myBomber = currentState.bombers.find((b) => b.uid === myUid)
-    if (myBomber) {
-      const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
-
-      // Check if the new bomb threatens our escape path
-      const unsafeTiles = findUnsafeTiles(
-        currentState.map,
-        currentState.bombs,
-        currentState.bombers,
-      )
-
-      // Only check if the DESTINATION (final tile) is safe
-      // Waypoints can be in danger zones as long as we're passing through before explosion
-      let finalX = playerGridPos.x
-      let finalY = playerGridPos.y
-
-      for (const step of escapePath) {
-        if (step === "UP") finalY--
-        else if (step === "DOWN") finalY++
-        else if (step === "LEFT") finalX--
-        else if (step === "RIGHT") finalX++
-      }
-
-      const destinationUnsafe = unsafeTiles.has(`${finalX},${finalY}`)
-
-      if (destinationUnsafe) {
-        console.log(`   ⚠️  Escape DESTINATION [${finalX}, ${finalY}] is unsafe!`)
-        console.log(`   🔄 ABORT ESCAPE - Finding new escape route!`)
-        // Cancel current escape
-        escapeMode = false
-        escapePath = []
-        forceClearIntervals()
-        // Immediately find new escape route
-        makeDecision()
-      } else {
-        console.log(`   ✅ Escape destination [${finalX}, ${finalY}] is safe, continuing...`)
-      }
-    }
-  } else if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-    // Only re-evaluate if this is NOT our own bomb (we already have an escape plan)
-    const isOurBomb = bomb.uid === myUid
-    if (!isOurBomb) {
-      console.log("🔔 Enemy bomb detected, re-evaluating...")
-      makeDecision()
-    } else {
-      console.log("💣 Our bomb placed, waiting for escape sequence to start...")
-    }
-  }
-})
-
-socket.on("bomb_explode", (bomb) => {
-  if (!currentState) return
-  const bombIndex = currentState.bombs.findIndex((b) => b.id === bomb.id)
-  if (bombIndex !== -1) currentState.bombs.splice(bombIndex, 1)
-  if (bombTracking.has(bomb.id)) bombTracking.delete(bomb.id)
-
-  // Only re-evaluate if we're not escaping or moving
-  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-    console.log("💥 Bomb exploded, re-evaluating...")
-    makeDecision()
-  } else if (escapeMode) {
-    console.log("🏃 Escape in progress, ignoring bomb explosion event")
-  }
-})
-
-socket.on("chest_destroyed", (chest) => {
-  if (!currentState) return
-  const { x: chestX, y: chestY } = toGridCoords(chest.x, chest.y)
-  let item = null
-
-  if (chest.item && ITEMS.includes(chest.item?.type)) item = chest.item.type
-  currentState.map[chestY][chestX] = item
-  // Only re-evaluate if we're not escaping or moving
-  if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-    console.log("🧱 Chest destroyed, re-evaluating...")
-    makeDecision()
-  } else if (escapeMode) {
-    console.log("🏃 Escape in progress, ignoring chest destroyed event")
-  }
-})
-
-socket.on("item_collected", (data) => {
-  if (!currentState) return
-  const { x: itemX, y: itemY } = toGridCoords(data.item.x, data.item.y)
-  currentState.map[itemY][itemX] = null
-
-  const bomber = currentState.bombers.find((b) => b?.uid === data.bomber?.uid && b?.uid === myUid)
-  if (bomber) {
-    const { speed, explosionRange, bombCount } = data
-    bomber.speed = speed || bomber.speed
-    bomber.explosionRange = explosionRange || bomber.explosionRange
-    bomber.bombCount = bombCount || bomber.bombCount
-  }
-
-  // TODO: Could also update bomber's attributes if needed
-  // Only re-evaluate if we're not escaping or moving
-  // if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-  //   console.log("✨ Item collected, re-evaluating...")
-  //   makeDecision() // Re-evaluate decision after an item is collected
-  // } else if (escapeMode) {
-  //   console.log("🏃 Escape in progress, ignoring item collected event")
-  // }
-})
-
-socket.on("map_update", (data) => {
-  if (!currentState) return
-  currentState.chests = data.chests
-  currentState.items = data.items
-  // if (!manualMode && !escapeMode && !moveIntervalId && !alignIntervalId) {
-  //   makeDecision()
-  // }
-})
-
-// ==================== ACTION HELPERS ====================
-
-function move(direction) {
-  socket.emit("move", { orient: direction })
-}
-
+/**
+ * Place a bomb
+ */
 function placeBomb() {
   socket.emit("place_bomb", {})
 }
 
-function alignToGrid(direction, myBomber) {
-  return new Promise((resolve) => {
-    let moveOver = null
-    let alignDirection = null
+/**
+ * Execute smooth movement to next grid cell
+ */
+async function smoothMove(direction, isEscapeMove = false) {
+  // Track movement timing
+  const movementStartTime = Date.now()
 
-    if (direction === "UP" || direction === "DOWN") {
-      // Check horizontal alignment (X-axis)
-      const xOffset = myBomber.x % GRID_SIZE
-      console.log(`   🔧 Checking alignment X-offset: ${xOffset}`)
-      if (xOffset <= GRID_SIZE - BOT_SIZE) return resolve()
-
-      // Not aligned, need to move horizontally
-      if (xOffset > BOT_SIZE / 2) {
-        alignDirection = "RIGHT"
-        moveOver = xOffset - offset
-      } else {
-        alignDirection = "LEFT"
-        moveOver = GRID_SIZE - xOffset + offset
-      }
-    } else if (direction === "LEFT" || direction === "RIGHT") {
-      // Check vertical alignment (Y-axis)
-      const yOffset = myBomber.y % GRID_SIZE
-      console.log(`   🔧 Checking alignment Y-offset: ${yOffset}`)
-      if (yOffset <= GRID_SIZE - BOT_SIZE) return resolve()
-
-      // Not aligned, need to move vertically
-      if (yOffset > BOT_SIZE / 2) {
-        alignDirection = "DOWN"
-        moveOver = yOffset - offset
-      } else {
-        alignDirection = "UP"
-        moveOver = GRID_SIZE - yOffset + offset
-      }
-    }
-
-    if (moveOver && alignDirection) {
-      const alignSteps = Math.ceil(moveOver / myBomber.speed)
-      let stepsLeft = alignSteps
-      console.log(
-        `🔧 Aligning ${alignDirection} (${moveOver.toFixed(1)}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${direction}`,
-      )
-      alignIntervalId = setInterval(() => {
-        if (stepsLeft > 0) {
-          socket.emit("move", { orient: alignDirection })
-          stepsLeft--
-        } else {
-          clearInterval(alignIntervalId)
-          alignIntervalId = null
-          return resolve()
-        }
-      }, STEP_DELAY - 10)
-    } else {
-      return resolve()
-    }
-  })
-}
-
-const smoothMove = async (direction, isEscapeMove = false) => {
   // Clear any existing intervals before starting a new move
-  if (moveIntervalId) {
+  if (gameContext.moveIntervalId) {
     console.log(`⚠️  Canceling previous move to start new move: ${direction}`)
-    clearInterval(moveIntervalId)
-    moveIntervalId = null
+    clearInterval(gameContext.moveIntervalId)
+    gameContext.moveIntervalId = null
   }
-  if (alignIntervalId) {
+  if (gameContext.alignIntervalId) {
     console.log(`⚠️  Canceling alignment to start move: ${direction}`)
-    clearInterval(alignIntervalId)
-    alignIntervalId = null
+    clearInterval(gameContext.alignIntervalId)
+    gameContext.alignIntervalId = null
   }
 
-  const myBomber = currentState.bombers.find((b) => b.uid === myUid)
+  const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
   if (!myBomber) {
     console.log("⚠️  Bomber not found in current state")
     return
   }
+  const movementStartGrid = { x: myBomber?.x, y: myBomber?.y }
 
-  // await alignToGrid(direction, myBomber)
+  await alignToGrid(direction, myBomber, socket, gameContext)
 
   const { x: currentX, y: currentY } = toGridCoords(myBomber.x, myBomber.y)
   let nextGridX = currentX
@@ -472,9 +104,87 @@ const smoothMove = async (direction, isEscapeMove = false) => {
   const targetPixelX = nextGridX * GRID_SIZE + offset
   const targetPixelY = nextGridY * GRID_SIZE + offset
 
-  moveIntervalId = setInterval(() => {
+  // CRITICAL: Validate target tile is walkable before attempting to move
+  if (
+    nextGridX < 0 ||
+    nextGridX >= MAP_WIDTH ||
+    nextGridY < 0 ||
+    nextGridY >= MAP_HEIGHT ||
+    !isWalkable(
+      gameContext.currentState.map,
+      nextGridX,
+      nextGridY,
+      gameContext.currentState.bombs,
+      gameContext.myUid,
+    )
+  ) {
+    console.log(
+      `❌ BLOCKED: Cannot move ${direction} to [${nextGridX}, ${nextGridY}] - tile not walkable!`,
+    )
+
+    // Abort current path since next step is blocked
+    if (pathModeManager.isEscaping()) {
+      pathModeManager.abortEscape("Next tile blocked")
+    }
+    if (pathModeManager.isFollowing()) {
+      pathModeManager.abortFollow("Next tile blocked")
+    }
+
+    // Re-evaluate immediately
+    setTimeout(() => {
+      makeDecision()
+    }, STEP_DELAY)
+    return
+  }
+
+  // STUCK DETECTION: Track position to detect if bot is stuck
+  let lastPosition = { x: myBomber.x, y: myBomber.y }
+  let stuckCounter = 0
+  const { MAX_STUCK_TIME, MAX_STUCK_CHECKS } = calculateStuckTimeout(myBomber.speed)
+  const MOVEMENT_THRESHOLD = 2 // Must move at least 2px to count as progress
+
+  console.log(
+    `🎯 Moving ${direction} to [${nextGridX}, ${nextGridY}] | Speed: ${myBomber.speed} | Timeout: ${MAX_STUCK_TIME}ms`,
+  )
+
+  gameContext.moveIntervalId = setInterval(() => {
     const currentPixelX = myBomber.x
     const currentPixelY = myBomber.y
+
+    // Check if bot is stuck (not moving)
+    if (isStuck({ x: currentPixelX, y: currentPixelY }, lastPosition, MOVEMENT_THRESHOLD)) {
+      stuckCounter++
+      if (stuckCounter >= MAX_STUCK_CHECKS) {
+        console.log(`⚠️  BOT STUCK! No movement detected for ${MAX_STUCK_TIME}ms`)
+        console.log(`   Target: [${nextGridX}, ${nextGridY}] (${targetPixelX}, ${targetPixelY})px`)
+        console.log(
+          `   Current: [${Math.floor(currentPixelX / GRID_SIZE)}, ${Math.floor(currentPixelY / GRID_SIZE)}] (${currentPixelX}, ${currentPixelY})px`,
+        )
+        console.log(
+          `   ❌ ALIGNMENT ISSUE: Bot not on grid (X%40=${currentPixelX % GRID_SIZE}, Y%40=${currentPixelY % GRID_SIZE})`,
+        )
+        clearInterval(gameContext.moveIntervalId)
+        gameContext.moveIntervalId = null
+
+        // Abort current path and re-evaluate
+        if (pathModeManager.isEscaping()) {
+          pathModeManager.abortEscape("Path blocked")
+        }
+        if (pathModeManager.isFollowing()) {
+          pathModeManager.abortFollow("Path blocked")
+        }
+
+        // Re-evaluate immediately
+        setTimeout(() => {
+          makeDecision()
+        }, STEP_DELAY)
+        return
+      }
+    } else {
+      // Bot is moving, reset stuck counter
+      stuckCounter = 0
+      lastPosition = { x: currentPixelX, y: currentPixelY }
+    }
 
     const distanceToTarget =
       direction === "UP" || direction === "DOWN"
@@ -482,23 +192,49 @@ const smoothMove = async (direction, isEscapeMove = false) => {
         : Math.abs(currentPixelX - targetPixelX)
 
     if (distanceToTarget <= offset) {
-      clearInterval(moveIntervalId)
-      moveIntervalId = null
+      clearInterval(gameContext.moveIntervalId)
+      gameContext.moveIntervalId = null
+
+      // Calculate actual movement time
+      const actualMoveTime = Date.now() - movementStartTime
+      const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+      if (myBomber && movementStartGrid) {
+        const gridMoved =
+          Math.abs(myBomber.x - movementStartGrid.x) + Math.abs(myBomber.y - movementStartGrid.y)
+        const timing = calculateMovementTiming(actualMoveTime, gridMoved, myBomber.speed)
+        if (timing) {
+          console.log(
+            `📊 TIMING MEASUREMENT: Moved ${gridMoved} grid(s) in ${actualMoveTime}ms (${timing.timePerGrid.toFixed(1)}ms/grid). Theoretical: ${timing.theoreticalTime.toFixed(1)}ms/grid. Diff: ${timing.difference.toFixed(1)}ms`,
+          )
+        }
+      }
+
       console.log(`✅ Move complete: ${direction}`)
 
-      if (escapeMode && escapePath.length > 0) {
-        const nextMove = escapePath.shift()
-        console.log(`🏃 Continuing escape: ${nextMove} (${escapePath.length} steps remaining)`)
+      // Priority 1: Continue escape mode
+      if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
+        const nextMove = pathModeManager.getNextEscapeMove()
+        console.log(
+          `🏃 Continuing escape: ${nextMove} (${pathModeManager.getRemainingEscapeSteps()} steps remaining)`,
+        )
         // Small delay between escape moves to ensure position updates
         setTimeout(() => {
           smoothMove(nextMove, true)
         }, STEP_DELAY)
+      }
+      // Priority 2: Continue follow mode (exploration/targeting paths)
+      else if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
+        const nextMove = pathModeManager.getNextFollowMove()
+        console.log(
+          `🚶 Continuing follow path: ${nextMove} (${pathModeManager.getRemainingFollowSteps()} steps remaining)`,
+        )
+        setTimeout(() => {
+          smoothMove(nextMove, false)
+        }, STEP_DELAY)
       } else {
-        // Escape complete or normal move done
-        if (escapeMode) {
-          console.log(`✅ Escape sequence completed!`)
-          escapeMode = false
-          escapePath = []
+        // Path complete - check which mode we were in
+        if (pathModeManager.isEscaping()) {
+          pathModeManager.completeEscape()
           console.log(`   ⏸️  Waiting before next decision to ensure safety...`)
           // Wait for bombs to explode before re-evaluating
           setTimeout(() => {
@@ -508,50 +244,63 @@ const smoothMove = async (direction, isEscapeMove = false) => {
           return // Don't call makeDecision immediately
         }
 
+        if (pathModeManager.isFollowing()) {
+          pathModeManager.completeFollow()
+        }
+
         // Normal move completed, make new decision
         setTimeout(() => {
           makeDecision()
         }, STEP_DELAY) // Small delay to let position update
       }
     } else {
-      move(direction)
+      sendMoveCommand(socket, direction)
     }
   }, STEP_DELAY)
 }
 
-// ==================== DECISION MAKER ====================
-
+/**
+ * Main decision making function
+ */
 function makeDecision() {
   // Skip AI decisions in manual mode
-  if (manualMode) {
+  if (manualControlManager.isManualMode()) {
     return
   }
 
   console.log(`${"=".repeat(90)}`)
   console.log(`Start decision making...`)
-  if (!currentState || !myUid) return
+  if (!gameContext.currentState || !gameContext.myUid) return
+
+  // CRITICAL: If in follow mode, skip decision making (following planned path)
+  if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
+    console.log(
+      `🚶 FOLLOW MODE ACTIVE - Skipping decision (${pathModeManager.getRemainingFollowSteps()} steps remaining)`,
+    )
+    return
+  }
 
   // CRITICAL: If in escape mode, check if path is still valid
-  if (escapeMode) {
-    if (escapePath.length === 0) {
+  if (pathModeManager.isEscaping()) {
+    if (pathModeManager.getRemainingEscapeSteps() === 0) {
       console.log(`⚠️  ESCAPE MODE but path is empty! Re-evaluating...`)
-      escapeMode = false
+      pathModeManager.abortEscape("Path empty")
       // Fall through to make new decision
     } else {
       console.log(
-        `🏃 ESCAPE MODE ACTIVE - Skipping decision (${escapePath.length} steps remaining)`,
+        `🏃 ESCAPE MODE ACTIVE - Skipping decision (${pathModeManager.getRemainingEscapeSteps()} steps remaining)`,
       )
       return
     }
   }
 
   // Don't make new decisions if a move is already in progress
-  if (moveIntervalId || alignIntervalId) {
+  if (gameContext.moveIntervalId || gameContext.alignIntervalId) {
     console.log("⏸️  Move in progress, skipping decision")
     return
   }
 
-  const myBomber = currentState.bombers.find((b) => b.uid === myUid)
+  const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
   if (!myBomber) return
 
   console.log(
@@ -561,22 +310,19 @@ function makeDecision() {
   )
 
   try {
-    const decision = decideNextAction(currentState, myUid)
+    const decision = decideNextAction(gameContext.currentState, gameContext.myUid)
     const { action, escapeAction, isEscape, fullPath } = decision
 
     console.log("=> Decide Next Action:", action, escapeAction, isEscape, fullPath)
 
     // Handle bomb placement FIRST before escape mode (don't let escape block bombing)
     if (action === "BOMB") {
-      // console.log(`💣 Placing bomb`)
       placeBomb()
 
       // After placing a bomb, start the full escape sequence if available
       if (isEscape && fullPath && fullPath.length > 0) {
-        console.log(`🏃 Entering ESCAPE MODE after bomb - ${fullPath.length} step sequence`)
-        escapeMode = true
-        escapePath = [...fullPath]
-        const firstMove = escapePath.shift()
+        pathModeManager.startEscape(fullPath)
+        const firstMove = pathModeManager.getNextEscapeMove()
         setTimeout(() => {
           smoothMove(firstMove, true)
         }, STEP_DELAY)
@@ -596,17 +342,22 @@ function makeDecision() {
 
     // If this is an escape decision with a full path, enter escape mode
     if (isEscape && fullPath && fullPath.length > 0) {
-      console.log(`🚨 Entering ESCAPE MODE - ${fullPath.length} step sequence`)
-      escapeMode = true
-      escapePath = [...fullPath]
-      const firstMove = escapePath.shift()
+      pathModeManager.startEscape(fullPath)
+      const firstMove = pathModeManager.getNextEscapeMove()
       smoothMove(firstMove, true)
       return
     }
 
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(action)) {
-      // Align to grid if not already aligned before moving
-      smoothMove(action)
+      // Check if this is a multi-step path (exploration/targeting)
+      if (!isEscape && fullPath && fullPath.length > 1) {
+        pathModeManager.startFollow(fullPath)
+        const firstMove = pathModeManager.getNextFollowMove()
+        smoothMove(firstMove, false)
+      } else {
+        // Single move or no full path - just move once
+        smoothMove(action)
+      }
     } else if (action === "STAY") {
       console.log(`⏸️  Staying put`)
       setTimeout(() => {
@@ -617,3 +368,55 @@ function makeDecision() {
     console.error("⚠️ Decision error:", err)
   }
 }
+
+// ==================== MANUAL CONTROL HANDLERS ====================
+
+function handleManualMove(direction, useSmoothMove) {
+  // Cancel any ongoing AI movements
+  gameContext.forceClearIntervals()
+
+  if (useSmoothMove) {
+    // Use smooth movement (full grid cell)
+    console.log(`   📏 Using smooth move (full cell)`)
+    smoothMove(direction, false)
+  } else {
+    // Send direct single-step move command
+    console.log(`   👣 Sending single step: ${direction}`)
+    sendMoveCommand(socket, direction)
+  }
+}
+
+function handleManualBomb() {
+  placeBomb()
+}
+
+function handleModeToggle() {
+  // Switched to AI mode, make a decision
+  makeDecision()
+}
+
+function getCurrentState() {
+  return {
+    currentState: gameContext.currentState,
+    myUid: gameContext.myUid,
+  }
+}
+
+// ==================== SOCKET SETUP ====================
+
+registerSocketHandlers(
+  socket,
+  gameContext,
+  pathModeManager,
+  bombTracker,
+  manualControlManager,
+  makeDecision,
+  () =>
+    setupManualControl(
+      manualControlManager,
+      handleManualMove,
+      handleManualBomb,
+      handleModeToggle,
+      getCurrentState,
+    ),
+)

@@ -136,6 +136,7 @@ function evaluateTrapPosition(myPos, enemy, escapeRoutes, map, myBomber) {
 
 /**
  * Check if enemy is in a confined space (corner, dead-end, narrow corridor)
+ * INTERNAL HELPER - Not exported
  */
 export function isEnemyTrapped(ex, ey, map) {
   let walkableNeighbors = 0
