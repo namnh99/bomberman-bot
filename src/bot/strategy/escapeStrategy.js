@@ -5,6 +5,7 @@ import { findBestPath, findShortestEscapePath } from "../pathfinding/pathFinder.
 import { wouldMoveTrapUs } from "../pathfinding/riskEvaluator.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
 import { findAdvancedEscapePath, detectBombChains } from "./advancedEscape.js"
+import { findPrioritizedEscapeDirection } from "../pathfinding/escapeDirectionSelector.js"
 
 // Escape reversal protection: avoid ping-pong between two tiles
 let lastEscapeFrom = null
@@ -17,6 +18,26 @@ const ESCAPE_REVERSAL_COOLDOWN_MS = 2000
  */
 export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   console.log(`   🚨 UNSAFE at [${player.x}, ${player.y}]! Finding escape route...`)
+
+  // PRIORITY 1: For dense bomb zones (2+ bombs), use timing-based direction selection
+  // This helps navigate through multiple overlapping bomb zones by choosing slower bombs
+  if (bombs.length >= 2) {
+    console.log(`   🕐 Multi-bomb zone (${bombs.length} bombs) - checking timing priorities...`)
+    const prioritizedDir = findPrioritizedEscapeDirection(map, player, bombs, bombers, myUid)
+
+    if (prioritizedDir) {
+      console.log(`   ✅ Using timing-optimized direction: ${prioritizedDir}`)
+      console.log(`🎯 DECISION: ESCAPE (timing-optimized)`)
+      console.log("=".repeat(90) + "\n")
+      return {
+        action: prioritizedDir,
+        isEscape: true,
+        fullPath: [prioritizedDir],
+      }
+    } else {
+      console.log(`   ⚠️ No safe timing-based direction, trying path-based escape...`)
+    }
+  }
 
   // Check for bomb chains first
   if (bombs.length >= 3) {
@@ -243,12 +264,52 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
  */
 export function checkSafety(map, player, bombs, bombers, myBomber) {
   const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
+  const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+
   const isPlayerSafe = bombs.length
     ? safeTiles.some((tile) => tile.x === player.x && tile.y === player.y)
     : true
 
-  console.log(`   Safety Status: ${isPlayerSafe ? "✅ SAFE" : "🚨 DANGER"}`)
+  // CRITICAL: Check if there are nearby bombs about to explode soon (urgency check)
+  // Even if player is currently "safe", if a bomb is exploding within 3s nearby,
+  // we should treat this as DANGER to trigger immediate escape
+  const now = Date.now()
+  const URGENCY_THRESHOLD = 3000 // 3 seconds
+  const URGENCY_PROXIMITY = 3 // 3 tiles away
+
+  let hasUrgentThreat = false
+  if (bombs.length > 0) {
+    for (const bomb of bombs) {
+      if (bomb.isExploded) continue
+
+      const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
+      const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+
+      // Check if bomb is nearby
+      if (distance <= URGENCY_PROXIMITY) {
+        const bombCreatedAt = bomb.createdAt || now
+        const bombLifeTime = bomb.lifeTime || 5000
+        const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
+
+        if (timeUntilExplosion > 0 && timeUntilExplosion <= URGENCY_THRESHOLD) {
+          console.log(
+            `   ⚠️ URGENT: Bomb at [${bombX},${bombY}] exploding in ${(timeUntilExplosion / 1000).toFixed(1)}s (${distance} tiles away)`,
+          )
+          hasUrgentThreat = true
+          break
+        }
+      }
+    }
+  }
+
+  // Override safety status if urgent threat detected
+  const finalSafetyStatus = isPlayerSafe && !hasUrgentThreat
+
+  console.log(`   Safety Status: ${finalSafetyStatus ? "✅ SAFE" : "🚨 DANGER"}`)
+  if (hasUrgentThreat && isPlayerSafe) {
+    console.log(`   ⚠️ Overriding to DANGER due to urgent bomb threat nearby`)
+  }
   console.log(`   Safe Tiles Available: ${safeTiles.length}`)
 
-  return { isPlayerSafe, safeTiles }
+  return { isPlayerSafe: finalSafetyStatus, safeTiles }
 }

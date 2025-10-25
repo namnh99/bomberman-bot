@@ -3,3 +3,4 @@ export { findUnsafeTiles, findSafeTiles, createBombTileMap } from "./dangerMap.j
 export { isTileSafeByTime } from "./safetyEvaluator.js"
 export { calculateDangerTimeline, findEscapeWindow, findSafestTimedPath } from "./timingAnalyzer.js"
 export { evaluatePositionRisk, findSafestNearbyPosition, wouldMoveTrapUs } from "./riskEvaluator.js"
+export { findPrioritizedEscapeDirection } from "./escapeDirectionSelector.js"

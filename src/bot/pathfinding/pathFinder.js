@@ -1,7 +1,7 @@
 import { GRID_SIZE, DIRS, WALKABLE, BREAKABLE, STEP_DELAY } from "../../utils/constants.js"
 import { inBounds, posKey, toGridCoords, isWalkable } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap } from "./dangerMap.js"
-import { isTileSafeByTime } from "./safetyEvaluator.js"
+import { isTileSafeByTime, getSafeTimeMargin } from "./safetyEvaluator.js"
 
 /**
  * A unified BFS that finds the best path to a target, avoiding active bomb zones
@@ -192,7 +192,9 @@ export function findShortestEscapePath(
   const currentSpeed = myBomber.speed || 1
 
   const bombTiles = createBombTileMap(bombs)
-  const unsafeTiles = strictMode ? findUnsafeTiles(map, bombs, allBombers) : new Set()
+  // CRITICAL: Always calculate unsafe tiles for destination validation
+  // strictMode only affects intermediate tiles, not final destination check
+  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
   // BFS queue: [x, y, path, stepCount]
   const queue = [[start.x, start.y, [], 0]]
@@ -210,13 +212,40 @@ export function findShortestEscapePath(
     }
 
     // Check if current position will be safe considering bomb timers
+    // CRITICAL: For escape DESTINATION, we need it to be OUTSIDE blast zones
+    // Timing-based checks are for intermediate tiles, not final destination
     const willBeSafe = strictMode
       ? !unsafeTiles.has(key)
       : isTileSafeByTime(x, y, stepCount, bombs, allBombers, map, currentSpeed)
 
-    if (willBeSafe) {
+    // ADDITIONAL CHECK: Destination must be outside all current blast zones
+    const isOutsideBlastZones = !unsafeTiles.has(key)
+
+    if (willBeSafe && isOutsideBlastZones) {
       // Only consider it a valid escape destination if it's NOT a bomb tile
       if (!bombAtCurrentTile && path.length > 0) {
+        // CRITICAL: Verify this escape destination has at least ONE safe exit
+        // (not trapped by walls/chests after escaping bomb)
+        let hasValidExit = false
+        for (const [dx, dy] of DIRS) {
+          const exitX = x + dx
+          const exitY = y + dy
+
+          if (!inBounds(exitX, exitY, map)) continue
+
+          const exitCell = map[exitY][exitX]
+          // Check if this direction is walkable AND not in current bomb zone
+          if (WALKABLE.includes(exitCell) && !unsafeTiles.has(posKey(exitX, exitY))) {
+            hasValidExit = true
+            break
+          }
+        }
+
+        if (!hasValidExit) {
+          console.log(`   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (no safe exits) - skipping`)
+          continue // Don't use this as escape destination
+        }
+
         // Calculate detailed timing for the escape path
         const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
         const alignmentOverhead = timePerGridCell * 0.5

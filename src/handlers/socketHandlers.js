@@ -143,12 +143,11 @@ export function registerSocketHandlers(
   socket.on("item_collected", (data) => {
     if (!gameContext.currentState) return
     const { x: itemX, y: itemY } = toGridCoords(data.item.x, data.item.y)
-    updateMapAfterItemCollect(gameContext.currentState, itemY, itemX)
+    updateMapAfterItemCollect(gameContext.currentState, itemX, itemY)
 
     const bomber = getBomber(gameContext.currentState, data.bomber?.uid)
     if (bomber && bomber.uid === gameContext.myUid) {
       updateBomberAttributes(gameContext.currentState, bomber.uid, data)
-      onMakeDecision()
     }
   })
 

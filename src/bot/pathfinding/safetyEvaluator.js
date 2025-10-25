@@ -155,3 +155,70 @@ export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, cur
 
   return true
 }
+
+/**
+ * Calculate the minimum safe time margin for a tile
+ * (how much extra time we have before nearest bomb explodes)
+ * Higher value = safer tile, prioritize this direction
+ *
+ * @param {number} x - Grid X coordinate
+ * @param {number} y - Grid Y coordinate
+ * @param {number} stepsToReach - Number of steps to reach this tile
+ * @param {Array} bombs - Array of active bombs
+ * @param {Array} allBombers - Array of all bombers
+ * @param {Object} map - Game map
+ * @param {number} currentSpeed - Current movement speed
+ * @returns {number} - Safe time margin in ms (Infinity if no bombs nearby)
+ */
+export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, currentSpeed = 1) {
+  const now = Date.now()
+  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const alignmentOverhead = timePerGridCell * 0.5
+  const timeToReach = stepsToReach * timePerGridCell + alignmentOverhead
+
+  let minTimeMargin = Infinity
+
+  for (const bomb of bombs) {
+    if (bomb.isExploded) continue
+
+    const owner = allBombers.find((b) => b.uid === bomb.uid)
+    const range = owner ? owner.explosionRange : 2
+    const { x: gridBombX, y: gridBombY } = toGridCoords(bomb.x, bomb.y)
+
+    const bombCreatedAt = bomb.createdAt || now
+    const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
+    const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
+
+    // Check if tile is bomb location or in blast zone
+    let affectedByBomb = false
+
+    if (x === gridBombX && y === gridBombY) {
+      affectedByBomb = true
+    } else {
+      // Check explosion range
+      for (const [dx, dy] of DIRS) {
+        for (let step = 1; step <= range; step++) {
+          const nx = gridBombX + dx * step
+          const ny = gridBombY + dy * step
+
+          if (!inBounds(nx, ny, map)) break
+          if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
+
+          if (nx === x && ny === y) {
+            affectedByBomb = true
+            break
+          }
+        }
+        if (affectedByBomb) break
+      }
+    }
+
+    if (affectedByBomb) {
+      // Calculate margin: time until explosion - time to reach
+      const margin = timeUntilExplosion - timeToReach
+      minTimeMargin = Math.min(minTimeMargin, margin)
+    }
+  }
+
+  return minTimeMargin
+}

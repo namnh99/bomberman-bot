@@ -1,6 +1,6 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
-import { decideNextAction } from "./bot/agent.js"
+import { decideNextAction, findUnsafeTiles } from "./bot/agent.js"
 import { STEP_DELAY, GRID_SIZE, MAP_WIDTH, MAP_HEIGHT } from "./utils/constants.js"
 import { toGridCoords } from "./utils/gridUtils.js"
 
