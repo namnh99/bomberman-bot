@@ -23,10 +23,8 @@ export function findBestPath(map, start, targets, bombs, allBombers, myUid, isEs
 
   // Pre-calculate unsafe tiles for O(1) lookup
   const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
-
-  // Create bomb tile map for checking bomberPassedThrough
-  const activeBombs = bombs.filter((b) => !b.isExploded)
-  const bombTiles = createBombTileMap(activeBombs)
+  // Create bomb tile map for checking walkable
+  const bombTiles = createBombTileMap(bombs)
 
   while (queue.length) {
     const [x, y, path, walls] = queue.shift()
@@ -57,9 +55,9 @@ export function findBestPath(map, start, targets, bombs, allBombers, myUid, isEs
         continue
       }
 
-      // Block bomb tiles based on bomberPassedThrough flag
+      // Block bomb tiles based on walkable flag
       const bombAtTile = bombTiles.get(key)
-      if (bombAtTile && bombAtTile.bomberPassedThrough) {
+      if (bombAtTile && !bombAtTile.walkable) {
         continue
       }
 
@@ -100,8 +98,7 @@ export function findShortestEscapePath(map, start, bombs, allBombers, myBomber) 
   const w = map[0].length
   const currentSpeed = myBomber.speed || 1
 
-  const activeBombs = bombs.filter((b) => !b.isExploded)
-  const bombTiles = createBombTileMap(activeBombs)
+  const bombTiles = createBombTileMap(bombs)
 
   // BFS queue: [x, y, path, stepCount]
   const queue = [[start.x, start.y, [], 0]]
@@ -114,7 +111,7 @@ export function findShortestEscapePath(map, start, bombs, allBombers, myBomber) 
     const bombAtCurrentTile = bombTiles.get(key)
 
     // Check if current position will be safe considering bomb timers
-    const willBeSafe = isTileSafeByTime(x, y, stepCount, activeBombs, allBombers, map, currentSpeed)
+    const willBeSafe = isTileSafeByTime(x, y, stepCount, bombs, allBombers, map, currentSpeed)
 
     if (willBeSafe) {
       // Only consider it a valid escape destination if it's NOT a bomb tile

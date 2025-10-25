@@ -70,9 +70,7 @@ export function findSafeTiles(map, bombs = [], allBombers = []) {
  */
 export function createBombTileMap(bombs) {
   const bombTiles = new Map()
-  const activeBombs = bombs.filter((b) => !b.isExploded)
-
-  activeBombs.forEach((b) => {
+  bombs.forEach((b) => {
     const { x, y } = toGridCoords(b.x, b.y)
     bombTiles.set(posKey(x, y), b)
   })

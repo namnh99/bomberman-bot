@@ -9,15 +9,15 @@ import { findAdvancedEscapePath, detectBombChains } from "./advancedEscape.js"
 /**
  * Try to escape from danger using advanced multi-bomb analysis
  */
-export function attemptEscape(map, player, activeBombs, bombers, myBomber, myUid) {
+export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   console.log(`   🚨 UNSAFE at [${player.x}, ${player.y}]! Finding escape route...`)
 
   // Check for bomb chains first
-  if (activeBombs.length >= 3) {
-    const chains = detectBombChains(activeBombs, bombers, map)
+  if (bombs.length >= 3) {
+    const chains = detectBombChains(bombs, bombers, map)
     if (chains.length > 0) {
       console.log(`   ⚠️ Detected ${chains.length} bomb chain(s)!`)
-      const advancedEscape = findAdvancedEscapePath(player, map, activeBombs, bombers, myBomber)
+      const advancedEscape = findAdvancedEscapePath(player, map, bombs, bombers, myBomber)
 
       if (advancedEscape && advancedEscape.path) {
         console.log(`   ✅ Advanced chain-aware escape: ${advancedEscape.path.join(" → ")}`)
@@ -33,16 +33,16 @@ export function attemptEscape(map, player, activeBombs, bombers, myBomber, myUid
   }
 
   // Use standard shortest path escape
-  const escapeResult = findShortestEscapePath(map, player, activeBombs, bombers, myBomber)
+  const escapeResult = findShortestEscapePath(map, player, bombs, bombers, myBomber)
 
   if (escapeResult && escapeResult.path.length > 0) {
     // Validate the first move doesn't trap us
     const firstMovePos = getNextPosition(player, escapeResult.path[0])
-    const wouldTrap = wouldMoveTrapUs(player, firstMovePos, map, activeBombs, [])
+    const wouldTrap = wouldMoveTrapUs(player, firstMovePos, map, bombs, [])
 
     if (wouldTrap) {
       console.log(`   ⚠️ Escape path would trap us! Trying alternative...`)
-      return attemptEmergencyEscape(map, player, activeBombs, bombers, myBomber)
+      return attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
     }
 
     console.log(`   ✅ Shortest escape path found: ${escapeResult.path.join(" → ")}`)
@@ -78,9 +78,9 @@ function getNextPosition(current, action) {
 /**
  * Try emergency moves when no clear escape path exists
  */
-export function attemptEmergencyEscape(map, player, activeBombs, bombers, myBomber) {
+export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
   console.log("   ⚠️ No direct escape path, trying emergency moves...")
-  const unsafeTiles = findUnsafeTiles(map, activeBombs, bombers)
+  const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
   const currentSpeed = myBomber.speed || 1
 
   // First pass: time-safe tiles
@@ -91,12 +91,12 @@ export function attemptEmergencyEscape(map, player, activeBombs, bombers, myBomb
     if (!isWalkable(nx, ny, map)) continue
 
     const key = posKey(nx, ny)
-    const isBombTile = activeBombs.some((bomb) => {
+    const isBombTile = bombs.some((bomb) => {
       const { x, y } = toGridCoords(bomb.x, bomb.y)
       return x === nx && y === ny
     })
 
-    const willBeSafe = isTileSafeByTime(nx, ny, 1, activeBombs, bombers, map, currentSpeed)
+    const willBeSafe = isTileSafeByTime(nx, ny, 1, bombs, bombers, map, currentSpeed)
 
     if (willBeSafe && !isBombTile) {
       console.log(`   ✅ Time-safe emergency move: ${dir} to [${nx}, ${ny}]`)
@@ -116,7 +116,7 @@ export function attemptEmergencyEscape(map, player, activeBombs, bombers, myBomb
     if (!isWalkable(nx, ny, map)) continue
 
     const key = posKey(nx, ny)
-    const isBombTile = activeBombs.some((bomb) => {
+    const isBombTile = bombs.some((bomb) => {
       const { x, y } = toGridCoords(bomb.x, bomb.y)
       return x === nx && y === ny
     })
@@ -140,7 +140,7 @@ export function attemptEmergencyEscape(map, player, activeBombs, bombers, myBomb
 
     if (!isWalkable(nx, ny, map)) continue
 
-    const isBombTile = activeBombs.some((bomb) => {
+    const isBombTile = bombs.some((bomb) => {
       const { x, y } = toGridCoords(bomb.x, bomb.y)
       return x === nx && y === ny
     })
@@ -161,9 +161,9 @@ export function attemptEmergencyEscape(map, player, activeBombs, bombers, myBomb
 /**
  * Check if player is currently safe from bombs
  */
-export function checkSafety(map, player, activeBombs, bombers, myBomber) {
-  const safeTiles = findSafeTiles(map, activeBombs, bombers, myBomber)
-  const isPlayerSafe = activeBombs.length
+export function checkSafety(map, player, bombs, bombers, myBomber) {
+  const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
+  const isPlayerSafe = bombs.length
     ? safeTiles.some((tile) => tile.x === player.x && tile.y === player.y)
     : true
 

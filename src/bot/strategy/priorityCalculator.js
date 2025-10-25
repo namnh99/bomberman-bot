@@ -108,7 +108,7 @@ export function calculateRiskTolerance(myBomber, enemies, items, chests) {
 
   // Speed factor
   const speedRatio = (myBomber.speed || 1) / 3
-  aggression += speedRatio * 0.15 // More speed = more aggressive (can escape easily)
+  aggression += speedRatio * 0.3 // More speed = more aggressive (can escape easily)
 
   // Enemy count factor
   const enemyCount = enemies.filter((e) => e.bomber && e.bomber.isAlive).length

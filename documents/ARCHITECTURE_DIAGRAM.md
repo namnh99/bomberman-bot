@@ -10,34 +10,34 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              ENTRY POINT                                    │
 │                            src/index.js                                     │
-│  ┌────────────────────────────────────────────────────────────────────┐    │
-│  │  • WebSocket Connection Management                                 │    │
-│  │  • Game State Management                                           │    │
-│  │  • Bomb Tracking (bomberPassedThrough)                            │    │
-│  │  • Manual/AI Mode Control                                          │    │
-│  │  • Movement Execution System                                       │    │
-│  └────────────────────────────────────────────────────────────────────┘    │
+│  ┌────────────────────────────────────────────────────────────────────┐     │
+│  │  • WebSocket Connection Management                                 │     │
+│  │  • Game State Management                                           │     │
+│  │  • Bomb Tracking (walkable)                                        │     │
+│  │  • Manual/AI Mode Control                                          │     │
+│  │  • Movement Execution System                                       │     │
+│  └────────────────────────────────────────────────────────────────────┘     │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          DECISION ENGINE                                    │
-│                   agent.js                                   │
-│  ┌────────────────────────────────────────────────────────────────────┐    │
-│  │                    decideNextAction(state, myUid)                  │    │
-│  │  ┌──────────────────────────────────────────────────────────────┐ │    │
-│  │  │  Phase 0: Context Analysis (game phase, risk, strategy)      │ │    │
-│  │  │  Phase 1: Safety Check & Escape                              │ │    │
-│  │  │  Phase 1.5: Enemy Trap Detection                             │ │    │
-│  │  │  Phase 1.6: Chain Reaction Detection                         │ │    │
-│  │  │  Phase 2: Dynamic Item Prioritization                        │ │    │
-│  │  │  Phase 3: Chest Bombing                                      │ │    │
-│  │  │  Phase 4: Target Prioritization                              │ │    │
-│  │  │  Phase 5: Enemy Pursuit                                      │ │    │
-│  │  │  Phase 6: Exploration                                        │ │    │
-│  │  └──────────────────────────────────────────────────────────────┘ │    │
-│  └────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                          DECISION ENGINE                                  │
+│                   agent.js                                                │
+│  ┌────────────────────────────────────────────────────────────────────┐   │
+│  │                    decideNextAction(state, myUid)                  │   │
+│  │  ┌──────────────────────────────────────────────────────────────┐  │   |
+│  │  │  Phase 0: Context Analysis (game phase, risk, strategy)      │  │   │
+│  │  │  Phase 1: Safety Check & Escape                              │  │   │
+│  │  │  Phase 1.5: Enemy Trap Detection                             │  │   │
+│  │  │  Phase 1.6: Chain Reaction Detection                         │  │   │
+│  │  │  Phase 2: Dynamic Item Prioritization                        │  │   │
+│  │  │  Phase 3: Chest Bombing                                      │  │   │
+│  │  │  Phase 4: Target Prioritization                              │  │   │
+│  │  │  Phase 5: Enemy Pursuit                                      │  │   │
+│  │  │  Phase 6: Exploration                                        │  │   │
+│  │  └──────────────────────────────────────────────────────────────┘  │   │
+│  └────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────────────────────────────────┘
                     │                               │
                     ▼                               ▼
     ┌───────────────────────────┐     ┌───────────────────────────┐
@@ -102,15 +102,15 @@ EXPORTS:
 ## Strategy Module Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                       STRATEGY MODULE                               │
-│                     src/bot/strategy/                               │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                       STRATEGY MODULE                            │
+│                     src/bot/strategy/                            │
+└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                    TARGET & ESCAPE STRATEGIES                       │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
+┌──────────────────────────────────────────────────────────────────┐
+│                    TARGET & ESCAPE STRATEGIES                    │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐      │
 │  │targetSelector  │  │escapeStrategy  │  │advancedEscape  │      │
 │  │                │  │                │  │                │      │
@@ -123,13 +123,13 @@ EXPORTS:
 │  │  DestroyedBy   │  │  fallback      │  │                │      │
 │  │  Bomb          │  │  system        │  │  Multi-bomb    │      │
 │  └────────────────┘  └────────────────┘  └────────────────┘      │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                    COMBAT & TRAP STRATEGIES                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
+┌──────────────────────────────────────────────────────────────────┐
+│                    COMBAT & TRAP STRATEGIES                      │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐      │
 │  │trapDetector    │  │threatAssessment│  │chainReaction   │      │
 │  │                │  │                │  │                │      │
@@ -142,13 +142,13 @@ EXPORTS:
 │  │  in corners/   │  │• shouldFight   │  │  Worthwhile    │      │
 │  │  dead-ends     │  │  OrFlee        │  │                │      │
 │  └────────────────┘  └────────────────┘  └────────────────┘      │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                 DECISION SUPPORT STRATEGIES                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
+┌──────────────────────────────────────────────────────────────────┐
+│                 DECISION SUPPORT STRATEGIES                      │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐      │
 │  │priorityCalc    │  │enemyPredictor  │  │bombValidator   │      │
 │  │                │  │                │  │                │      │
@@ -163,13 +163,13 @@ EXPORTS:
 │  │  values based  │  │  enemy moves   │  │  bomb placement│      │
 │  │  on game state │  │  3 ticks ahead │  │  with escape   │      │
 │  └────────────────┘  └────────────────┘  └────────────────┘      │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                   OPTIMIZATION STRATEGIES                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
+┌───────────────────────────────────────────────────────────────────┐
+│                   OPTIMIZATION STRATEGIES                         │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
 │  ┌────────────────┐  ┌────────────────┐                           │
 │  │multiTargetPath │  │zoneControl     │                           │
 │  │                │  │                │                           │
@@ -184,8 +184,8 @@ EXPORTS:
 │  │  items in      │  │  into zones,   │                           │
 │  │  optimal order │  │  scores safety │                           │
 │  └────────────────┘  └────────────────┘                           │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -396,7 +396,7 @@ Analyzer    Eval       Valid  Calculator Pred  Reaction
 │        lifeTime: 5000,        // Time to explosion         │
 │        createdAt: 1635...,    // Timestamp                 │
 │        isExploded: false,     // State                     │
-│        bomberPassedThrough: false // Tracked client-side   │
+│        walkable: false // Tracked client-side   │
 │      }                                                      │
 │    ],                                                       │
 │    bombers: [                                               │
@@ -431,22 +431,22 @@ Analyzer    Eval       Valid  Calculator Pred  Reaction
 │                                                             │
 │  Server Tick (every 20ms)                                   │
 │     │                                                       │
-│     ├─► Receive game state (0-5ms network latency)         │
+│     ├─► Receive game state (0-5ms network latency)          │
 │     │                                                       │
 │     ├─► Execute decideNextAction()                          │
-│     │   ├─ Phase 0: Context (1ms)                          │
-│     │   ├─ Phase 1: Safety (2-3ms)                         │
-│     │   ├─ Phase 2: Items (2-3ms)                          │
-│     │   ├─ Phase 3: Chests (1-2ms)                         │
-│     │   └─ Total: 5-15ms                                   │
+│     │   ├─ Phase 0: Context (1ms)                           │
+│     │   ├─ Phase 1: Safety (2-3ms)                          │
+│     │   ├─ Phase 2: Items (2-3ms)                           │
+│     │   ├─ Phase 3: Chests (1-2ms)                          │
+│     │   └─ Total: 5-15ms                                    │
 │     │                                                       │
-│     ├─► Send action to server (0-5ms network)              │
+│     ├─► Send action to server (0-5ms network)               │
 │     │                                                       │
-│     └─► Wait for next tick                                 │
+│     └─► Wait for next tick                                  │
 │                                                             │
-│  Total Cycle Time: 20ms (server controlled)                │
-│  Bot Processing: 5-15ms (well within budget)               │
-│  Network: 0-10ms (depends on connection)                   │
+│  Total Cycle Time: 20ms (server controlled)                 │
+│  Bot Processing: 5-15ms (well within budget)                │
+│  Network: 0-10ms (depends on connection)                    │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -461,27 +461,27 @@ Analyzer    Eval       Valid  Calculator Pred  Reaction
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  1. Escape Priority                                         │
-│     ├─ ALWAYS check safety first                           │
-│     ├─ 3-tier escape fallback                              │
-│     └─ Anti-oscillation tracking                           │
+│     ├─ ALWAYS check safety first                            │
+│     ├─ 3-tier escape fallback                               │
+│     └─ Anti-oscillation tracking                            │
 │                                                             │
 │  2. Bomb Validation                                         │
-│     ├─ Pre-validate escape before bombing                  │
-│     ├─ Check item destruction                              │
-│     └─ Verify safe tiles exist                             │
+│     ├─ Pre-validate escape before bombing                   │
+│     ├─ Check item destruction                               │
+│     └─ Verify safe tiles exist                              │
 │                                                             │
 │  3. Position Risk                                           │
-│     ├─ Evaluate before moving                              │
-│     ├─ Avoid dead-ends                                     │
-│     └─ Check trap conditions                               │
+│     ├─ Evaluate before moving                               │
+│     ├─ Avoid dead-ends                                      │
+│     └─ Check trap conditions                                │
 │                                                             │
 │  4. Timing Safety                                           │
-│     ├─ 200ms buffer on explosions                          │
-│     ├─ Account for network latency                         │
-│     └─ Validate time calculations                          │
+│     ├─ 200ms buffer on explosions                           │
+│     ├─ Account for network latency                          │
+│     └─ Validate time calculations                           │
 │                                                             │
 │  5. Fallback Actions                                        │
-│     └─ If all else fails: "STAY"                           │
+│     └─ If all else fails: "STAY"                            │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```

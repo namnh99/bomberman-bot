@@ -1,4 +1,11 @@
-import { GRID_SIZE, DIRS, WALKABLE, BREAKABLE, ITEM_PRIORITY_BIAS } from "../utils/constants.js"
+import {
+  GRID_SIZE,
+  DIRS,
+  WALKABLE,
+  BREAKABLE,
+  ITEM_PRIORITY_BIAS,
+  OSCILLATION_THRESHOLD,
+} from "../utils/constants.js"
 import { toGridCoords, posKey, isAdjacent, inBounds } from "../utils/gridUtils.js"
 import { findBestPath } from "./pathfinding/index.js"
 import { findSafeTiles } from "./pathfinding/dangerMap.js"
@@ -33,6 +40,7 @@ import {
 let lastPosition = null
 let lastDecision = null
 let decisionCount = 0
+let recentPositions = []
 
 function trackDecision(player, action) {
   const key = posKey(player.x, player.y)
@@ -45,8 +53,6 @@ function trackDecision(player, action) {
  */
 function handleTarget(result, state, myUid) {
   const { map, bombs = [], bombers } = state
-  const activeBombs = bombs.filter((b) => !b.isExploded)
-
   const myBomber = bombers && bombers.find((b) => b.uid === myUid)
   const player = toGridCoords(myBomber.x, myBomber.y)
 
@@ -85,7 +91,7 @@ function handleTarget(result, state, myUid) {
       )
 
       const futureBombs = [
-        ...activeBombs,
+        ...bombs,
         {
           x: player.x * GRID_SIZE,
           y: player.y * GRID_SIZE,
@@ -143,7 +149,8 @@ function handleTarget(result, state, myUid) {
     console.log("   Action:", result.path[0])
     console.log("=".repeat(60) + "\n")
     trackDecision(player, result.path[0])
-    return { action: result.path[0] }
+    // Return the full path so the client can follow the entire route and avoid local oscillation
+    return { action: result.path[0], fullPath: result.path }
   }
 
   console.log("🎯 DECISION: STAY (No path)")
@@ -166,11 +173,33 @@ export function decideNextAction(state, myUid) {
 
   const player = toGridCoords(myBomber.x, myBomber.y)
 
+  // --- Push current position into short history (keep last 4) ---
+  const currentPosKeyForHistory = posKey(player.x, player.y)
+  recentPositions.push(currentPosKeyForHistory)
+  if (recentPositions.length > 4) recentPositions.shift()
+
+  // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
+  if (
+    recentPositions.length === 4 &&
+    recentPositions[0] === recentPositions[2] &&
+    recentPositions[1] === recentPositions[3] &&
+    recentPositions[0] !== recentPositions[1]
+  ) {
+    console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
+    recentPositions = [] // reset history so we don't continuously trigger
+    if (lastDecision) {
+      console.log(`   Returning previous decision to commit: ${lastDecision}`)
+      return { action: lastDecision }
+    }
+    return { action: "STAY" }
+  }
+
   // Anti-oscillation check
   const currentPosKey = posKey(player.x, player.y)
   if (lastPosition === currentPosKey && lastDecision) {
     decisionCount++
-    if (decisionCount >= 2) {
+    if (decisionCount >= OSCILLATION_THRESHOLD) {
+      // Keep the same decision to commit to the path
       lastPosition = null
       decisionCount = 0
       return { action: lastDecision }
@@ -179,22 +208,21 @@ export function decideNextAction(state, myUid) {
     decisionCount = 0
   }
 
-  const activeBombs = bombs.filter((b) => !b.isExploded)
-  console.log("💣 Active (non-exploded) Bombs:", activeBombs.length)
-  if (activeBombs.length > 0) {
-    console.log("   Bomb positions:")
-    activeBombs.forEach((b, i) => {
-      const { x, y } = toGridCoords(b.x, b.y)
-      console.log(`   Bomb ${i + 1}: [${x}, ${y}] | owner: ${b.uid === myUid ? "ME" : b.uid}`)
-    })
-  }
-  console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
+  // console.log("💣 Active (non-exploded) Bombs:", bombs.length)
+  // if (bombs.length > 0) {
+  //   console.log("   Bomb positions:")
+  //   bombs.forEach((b, i) => {
+  //     const { x, y } = toGridCoords(b.x, b.y)
+  //     console.log(`   Bomb ${i + 1}: [${x}, ${y}] | owner: ${b.uid === myUid ? "ME" : b.uid}`)
+  //   })
+  // }
+  // console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
 
   // PHASE 0: Game Context Analysis
   console.log("\n🔍 PHASE 0: Game Context Analysis")
-  const enemies = findAllEnemies(map, activeBombs, bombers, myUid)
-  const allItems = findAllItems(map, activeBombs, bombers)
-  const allChests = findAllChests(map, activeBombs, bombers)
+  const enemies = findAllEnemies(map, bombs, bombers, myUid)
+  const allItems = findAllItems(map, bombs, bombers)
+  const allChests = findAllChests(map, bombs, bombers)
 
   const gamePhase = determineGamePhase(myBomber, enemies, allItems, allChests)
   const riskTolerance = calculateRiskTolerance(myBomber, enemies, allItems, allChests)
@@ -212,16 +240,16 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 1: Safety Check
   console.log("\n🔍 PHASE 1: Safety Check")
-  const { isPlayerSafe, safeTiles } = checkSafety(map, player, activeBombs, bombers, myBomber)
+  const { isPlayerSafe, safeTiles } = checkSafety(map, player, bombs, bombers, myBomber)
 
   if (!isPlayerSafe) {
-    const escapeResult = attemptEscape(map, player, activeBombs, bombers, myBomber, myUid)
+    const escapeResult = attemptEscape(map, player, bombs, bombers, myBomber, myUid)
     if (escapeResult) {
       trackDecision(player, escapeResult.action)
       return escapeResult
     }
 
-    const emergencyResult = attemptEmergencyEscape(map, player, activeBombs, bombers, myBomber)
+    const emergencyResult = attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
     if (emergencyResult) {
       trackDecision(player, emergencyResult.action)
       return emergencyResult
@@ -252,7 +280,7 @@ export function decideNextAction(state, myUid) {
         const bombPos = bestTrap.bombPosition || player
 
         // Validate bomb safety
-        const validation = validateBombSafety(bombPos, map, activeBombs, bombers, myBomber, myUid)
+        const validation = validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid)
 
         if (validation.canBomb) {
           // Check if we need to move to bomb position first
@@ -269,13 +297,14 @@ export function decideNextAction(state, myUid) {
             }
           } else {
             // Path to bomb position
-            const pathToTrap = findBestPath(map, player, [bombPos], activeBombs, bombers, myUid)
+            const pathToTrap = findBestPath(map, player, [bombPos], bombs, bombers, myUid)
             if (pathToTrap && pathToTrap.path.length > 0) {
               console.log(`   Moving to trap position: ${pathToTrap.path.join(" → ")}`)
               console.log(`🎯 DECISION: Move to trap position`)
               console.log("=".repeat(90) + "\n")
               trackDecision(player, pathToTrap.path[0])
-              return { action: pathToTrap.path[0] }
+              // Return full path so client can follow complete route to trap position
+              return { action: pathToTrap.path[0], fullPath: pathToTrap.path }
             }
           }
         }
@@ -284,12 +313,12 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 1.6: Chain Reaction Detection
-  if (activeBombs.length > 0 && myBomber.bombCount > 0 && riskTolerance > 0.5) {
+  if (bombs.length > 0 && myBomber.bombCount > 0 && riskTolerance > 0.5) {
     console.log("\n🔍 PHASE 1.6: Chain Reaction Detection")
     const chainOpportunities = findChainReactionOpportunities(
       player,
       map,
-      activeBombs,
+      bombs,
       bombers,
       myBomber,
       5,
@@ -303,7 +332,7 @@ export function decideNextAction(state, myUid) {
       )
 
       if (isChainReactionWorthwhile(bestChain, riskTolerance)) {
-        const validation = validateBombSafety(bestChain, map, activeBombs, bombers, myBomber, myUid)
+        const validation = validateBombSafety(bestChain, map, bombs, bombers, myBomber, myUid)
 
         if (validation.canBomb && bestChain.distance === 0) {
           console.log(`   🔥 Triggering chain reaction!`)
@@ -323,7 +352,7 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 2: Dynamic Item Prioritization
   console.log(`\n🔍 PHASE 2: Dynamic Item Prioritization`)
-  const items = findAllItems(map, activeBombs, bombers)
+  const items = findAllItems(map, bombs, bombers)
   console.log(`   Items found: ${items.length}`)
 
   // Apply dynamic prioritization
@@ -344,14 +373,7 @@ export function decideNextAction(state, myUid) {
   let itemResult = null
   if (prioritizedItems.length > 0) {
     const topItems = prioritizedItems.slice(0, 5).map((pi) => pi.item)
-    const multiStrategy = compareSingleVsMultiTarget(
-      player,
-      topItems,
-      map,
-      activeBombs,
-      bombers,
-      myUid,
-    )
+    const multiStrategy = compareSingleVsMultiTarget(player, topItems, map, bombs, bombers, myUid)
 
     if (multiStrategy) {
       if (multiStrategy.strategy === "multi") {
@@ -379,7 +401,8 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 3: Find Chests
-  const chests = findAllChests(map, activeBombs, bombers)
+  console.log(`\n🔍 PHASE 3: Chest Bombing`)
+  const chests = findAllChests(map, bombs, bombers)
   console.log(`   Chests found: ${chests.length}`)
   if (chests.length > 0) {
     console.log(
@@ -395,21 +418,20 @@ export function decideNextAction(state, myUid) {
   if (chests.length) {
     // Check if adjacent to a chest
     const adjacentChest = chests.find((c) => isAdjacent(c.x, c.y, player.x, player.y))
-
     if (adjacentChest) {
       console.log(`\n🔍 PHASE 3: Adjacent Chest Bombing`)
       console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
 
-      const bombAlreadyHere = activeBombs.some((bomb) => {
+      const bombAlreadyHere = bombs.some((bomb) => {
         const { x, y } = toGridCoords(bomb.x, bomb.y)
         return x === player.x && y === player.y
       })
 
       if (bombAlreadyHere) {
         console.log(`   ⏸️  Bomb already exists at [${player.x}, ${player.y}], escaping instead`)
-        const safeTiles = findSafeTiles(map, activeBombs, bombers, myBomber)
+        const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
         if (safeTiles.length > 0) {
-          const escapePath = findBestPath(map, player, safeTiles, activeBombs, bombers, myUid, true)
+          const escapePath = findBestPath(map, player, safeTiles, bombs, bombers, myUid, true)
           if (escapePath && escapePath.path.length > 0) {
             return {
               action: escapePath.path[0],
@@ -451,7 +473,7 @@ export function decideNextAction(state, myUid) {
 
           if (chestCount.count > 0) {
             const futureBombs = [
-              ...activeBombs,
+              ...bombs,
               {
                 x: player.x * GRID_SIZE,
                 y: player.y * GRID_SIZE,
@@ -516,7 +538,7 @@ export function decideNextAction(state, myUid) {
         const key = posKey(adjX, adjY)
 
         if (map[adjY] && WALKABLE.includes(map[adjY][adjX])) {
-          const hasBomb = activeBombs.some((b) => {
+          const hasBomb = bombs.some((b) => {
             const { x, y } = toGridCoords(b.x, b.y)
             return x === adjX && y === adjY
           })
@@ -559,7 +581,7 @@ export function decideNextAction(state, myUid) {
         (t) => t.chestCount === adjacentTargetsWithScore[0].chestCount,
       )
 
-      chestResult = findBestPath(map, player, bestTargets, activeBombs, bombers, myUid)
+      chestResult = findBestPath(map, player, bestTargets, bombs, bombers, myUid)
       if (chestResult) {
         console.log(
           `   ✅ Path to chest: ${chestResult.path.join(" → ")} (${chestResult.path.length} steps)`,
@@ -640,7 +662,7 @@ export function decideNextAction(state, myUid) {
 
           if (willHit) {
             const futureBombs = [
-              ...activeBombs,
+              ...bombs,
               {
                 x: player.x * GRID_SIZE,
                 y: player.y * GRID_SIZE,
@@ -687,7 +709,7 @@ export function decideNextAction(state, myUid) {
         const tx = enemy.x + adx
         const ty = enemy.y + ady
         if (map[ty] && WALKABLE.includes(map[ty][tx])) {
-          const hasBomb = activeBombs.some((b) => {
+          const hasBomb = bombs.some((b) => {
             const { x, y } = toGridCoords(b.x, b.y)
             return x === tx && y === ty
           })
@@ -696,7 +718,7 @@ export function decideNextAction(state, myUid) {
       }
 
       if (adjacentTargets.length > 0) {
-        const pathToAdj = findBestPath(map, player, adjacentTargets, activeBombs, bombers, myUid)
+        const pathToAdj = findBestPath(map, player, adjacentTargets, bombs, bombers, myUid)
         if (pathToAdj && pathToAdj.path.length > 0) {
           if (myBomber.bombCount) {
             let fx = player.x
@@ -719,7 +741,7 @@ export function decideNextAction(state, myUid) {
             )
             if (willHit) {
               const futureBombs = [
-                ...activeBombs,
+                ...bombs,
                 {
                   x: finalPos.x * GRID_SIZE,
                   y: finalPos.y * GRID_SIZE,
@@ -745,7 +767,8 @@ export function decideNextAction(state, myUid) {
                   if (pathToAdj.path.length > 0) {
                     console.log("   🎯 DECISION: MOVE (towards enemy)")
                     trackDecision(player, pathToAdj.path[0])
-                    return { action: pathToAdj.path[0] }
+                    // Provide full path so client can follow complete route toward enemy
+                    return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
                   }
                 }
               }
@@ -753,7 +776,7 @@ export function decideNextAction(state, myUid) {
           } else {
             console.log("   ⚠️ No bombs available, chasing enemy")
             trackDecision(player, pathToAdj.path[0])
-            return { action: pathToAdj.path[0] }
+            return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
           }
         }
       }
@@ -795,14 +818,15 @@ export function decideNextAction(state, myUid) {
     console.log(`   Safe tiles excluding current position: ${otherSafeTiles.length}`)
 
     if (otherSafeTiles.length > 0) {
-      const explorePath = findBestPath(map, player, otherSafeTiles, activeBombs, bombers, myUid)
+      const explorePath = findBestPath(map, player, otherSafeTiles, bombs, bombers, myUid)
       if (explorePath && explorePath.path.length > 0) {
         console.log(`   ✅ Exploration path: ${explorePath.path.join(" → ")}`)
         console.log("🎯 DECISION: EXPLORE")
         console.log("   Action:", explorePath.path[0])
         console.log("=".repeat(90) + "\n")
         trackDecision(player, explorePath.path[0])
-        return { action: explorePath.path[0] }
+        // Return full exploration path so client can follow and avoid local oscillation
+        return { action: explorePath.path[0], fullPath: explorePath.path }
       } else {
         console.log(`   ❌ No exploration path found (likely trapped by walls/chests)`)
       }
@@ -816,7 +840,7 @@ export function decideNextAction(state, myUid) {
 
         if (inBounds(nx, ny, map) && WALKABLE.includes(map[ny][nx])) {
           // Check if there's no bomb at this tile
-          const hasBomb = activeBombs.some((b) => {
+          const hasBomb = bombs.some((b) => {
             const { x, y } = toGridCoords(b.x, b.y)
             return x === nx && y === ny
           })
@@ -826,7 +850,8 @@ export function decideNextAction(state, myUid) {
             console.log("🎯 DECISION: EXPLORE (adjacent move)")
             console.log("=".repeat(90) + "\n")
             trackDecision(player, dir)
-            return { action: dir }
+            // Return single-step fullPath for client follow consistency
+            return { action: dir, fullPath: [dir] }
           }
         }
       }
@@ -883,7 +908,7 @@ export function decideNextAction(state, myUid) {
       // Only bomb if we can destroy obstacles and escape safely
       if (obstaclesInRange.length > 0) {
         const futureBombs = [
-          ...activeBombs,
+          ...bombs,
           {
             x: player.x * GRID_SIZE,
             y: player.y * GRID_SIZE,

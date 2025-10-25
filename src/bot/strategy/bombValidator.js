@@ -7,11 +7,11 @@ import { GRID_SIZE } from "../../utils/constants.js"
  * Validate if bombing is safe by checking escape routes BEFORE committing
  * Returns { canBomb: boolean, escapePath: array, reason: string }
  */
-export function validateBombSafety(bombPos, map, activeBombs, bombers, myBomber, myUid) {
+export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid) {
   const { x: bx, y: by } = bombPos
 
   // Check if bomb already exists at this position
-  const bombAlreadyHere = activeBombs.some((bomb) => {
+  const bombAlreadyHere = bombs.some((bomb) => {
     const { x, y } = toGridCoords(bomb.x, bomb.y)
     return x === bx && y === by
   })
@@ -26,7 +26,7 @@ export function validateBombSafety(bombPos, map, activeBombs, bombers, myBomber,
 
   // Simulate future bomb state
   const futureBombs = [
-    ...activeBombs,
+    ...bombs,
     {
       x: bx * GRID_SIZE,
       y: by * GRID_SIZE,
@@ -94,11 +94,11 @@ export function validateBombSafety(bombPos, map, activeBombs, bombers, myBomber,
 /**
  * Pre-validate multiple bomb positions and return best option
  */
-export function findBestSafeBombPosition(positions, map, activeBombs, bombers, myBomber, myUid) {
+export function findBestSafeBombPosition(positions, map, bombs, bombers, myBomber, myUid) {
   const validPositions = []
 
   for (const pos of positions) {
-    const validation = validateBombSafety(pos, map, activeBombs, bombers, myBomber, myUid)
+    const validation = validateBombSafety(pos, map, bombs, bombers, myBomber, myUid)
 
     if (validation.canBomb) {
       validPositions.push({
@@ -120,6 +120,6 @@ export function findBestSafeBombPosition(positions, map, activeBombs, bombers, m
 /**
  * Quick check if current position is safe to bomb from
  */
-export function canSafelyBombCurrentPosition(myPos, map, activeBombs, bombers, myBomber, myUid) {
-  return validateBombSafety(myPos, map, activeBombs, bombers, myBomber, myUid)
+export function canSafelyBombCurrentPosition(myPos, map, bombs, bombers, myBomber, myUid) {
+  return validateBombSafety(myPos, map, bombs, bombers, myBomber, myUid)
 }

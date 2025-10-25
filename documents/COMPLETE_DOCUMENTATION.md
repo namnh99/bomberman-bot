@@ -17,7 +17,7 @@ bomberman-bot/
 ├── src/
 │   ├── index.js                          # Main entry point (708 lines)
 │   ├── bot/
-│   │   ├── agent.js       # Core decision engine (730 lines)
+│   │   ├── agent.js                      # Core decision engine (730 lines)
 │   │   ├── pathfinding/                  # Movement & escape algorithms
 │   │   │   ├── index.js                  # Module exports
 │   │   │   ├── pathFinder.js             # BFS pathfinding (155 lines)
@@ -75,7 +75,7 @@ bomberman-bot/
 - **WebSocket Management:** Connect to game server, handle connection lifecycle
 - **Event Handling:** Listen to game events (player_move, new_bomb, bomb_explode, etc.)
 - **State Management:** Maintain current game state (map, bombs, players)
-- **Bomb Tracking:** Client-side tracking of `bomberPassedThrough` flag
+- **Bomb Tracking:** Client-side tracking of `walkable` flag
 - **Manual Control:** Allow human override with keyboard controls
 - **Movement Execution:** Smooth grid-aligned movement system
 
@@ -94,7 +94,7 @@ socket.on("player_move", (data) => {
 
 socket.on("new_bomb", (data) => {
   // Add new bomb to state
-  // Set bomberPassedThrough based on our position
+  // Set walkable based on our position
 })
 
 socket.on("bomb_explode", (data) => {
@@ -119,83 +119,83 @@ The core AI brain that decides every action.
 │              decideNextAction(state, myUid)              │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
-│  PHASE 0: Game Context Analysis                         │
-│  ├─ Determine game phase (early/mid/late)               │
-│  ├─ Calculate risk tolerance (0.0 - 1.0)                │
-│  ├─ Decide strategy (fight/flee/neutral)                │
-│  └─ Find all enemies, items, chests                     │
+│  PHASE 0: Game Context Analysis                          │
+│  ├─ Determine game phase (early/mid/late)                │
+│  ├─ Calculate risk tolerance (0.0 - 1.0)                 │
+│  ├─ Decide strategy (fight/flee/neutral)                 │
+│  └─ Find all enemies, items, chests                      │
 │                                                          │
 │  PHASE 1: Safety Check ⚠️                                │
-│  ├─ Am I in danger from bombs?                          │
-│  │   ├─ YES → Try escape strategies:                    │
-│  │   │   ├─ 1. Chain-aware escape (3+ bombs)            │
-│  │   │   ├─ 2. Shortest escape path                     │
-│  │   │   ├─ 3. Emergency time-safe moves                │
-│  │   │   └─ 4. Last resort: any walkable tile           │
-│  │   └─ NO → Continue to next phase                     │
+│  ├─ Am I in danger from bombs?                           │
+│  │   ├─ YES → Try escape strategies:                     │
+│  │   │   ├─ 1. Chain-aware escape (3+ bombs)             │
+│  │   │   ├─ 2. Shortest escape path                      │
+│  │   │   ├─ 3. Emergency time-safe moves                 │
+│  │   │   └─ 4. Last resort: any walkable tile            │
+│  │   └─ NO → Continue to next phase                      │
 │                                                          │
 │  PHASE 1.5: Enemy Trap Detection 🎯                      │
-│  ├─ IF aggressive strategy AND enemies nearby           │
-│  │   ├─ Find trap opportunities                         │
-│  │   ├─ Check if enemy is in corner/dead-end            │
-│  │   ├─ Validate bomb placement safety                  │
-│  │   └─ Bomb if trap value > 50 and can escape          │
+│  ├─ IF aggressive strategy AND enemies nearby            │
+│  │   ├─ Find trap opportunities                          │
+│  │   ├─ Check if enemy is in corner/dead-end             │
+│  │   ├─ Validate bomb placement safety                   │
+│  │   └─ Bomb if trap value > 50 and can escape           │
 │                                                          │
 │  PHASE 1.6: Chain Reaction Detection 💥                  │
-│  ├─ IF bombs active AND risk tolerance > 0.5            │
-│  │   ├─ Find chain reaction opportunities               │
-│  │   ├─ Check if worthwhile (chests vs items)           │
-│  │   ├─ Validate escape exists                          │
-│  │   └─ Bomb if chain destroys 3+ chests                │
+│  ├─ IF bombs active AND risk tolerance > 0.5             │
+│  │   ├─ Find chain reaction opportunities                │
+│  │   ├─ Check if worthwhile (chests vs items)            │
+│  │   ├─ Validate escape exists                           │
+│  │   └─ Bomb if chain destroys 3+ chests                 │
 │                                                          │
 │  PHASE 2: Dynamic Item Prioritization 🎁                 │
-│  ├─ Find all items on map                               │
-│  ├─ Apply dynamic priority scoring:                     │
-│  │   ├─ Distance penalty (closer = better)              │
-│  │   ├─ Current stats (need speed vs range)             │
-│  │   ├─ Game phase (early = range, late = speed)        │
-│  │   └─ Enemy proximity (danger penalty)                │
-│  ├─ Try multi-target path (collect 3-5 items)           │
-│  └─ Compare single vs multi-target efficiency           │
+│  ├─ Find all items on map                                │
+│  ├─ Apply dynamic priority scoring:                      │
+│  │   ├─ Distance penalty (closer = better)               │
+│  │   ├─ Current stats (need speed vs range)              │
+│  │   ├─ Game phase (early = range, late = speed)         │
+│  │   └─ Enemy proximity (danger penalty)                 │
+│  ├─ Try multi-target path (collect 3-5 items)            │
+│  └─ Compare single vs multi-target efficiency            │
 │                                                          │
 │  PHASE 3: Chest Bombing 🧱                               │
-│  ├─ Find all breakable chests                           │
-│  ├─ IF adjacent to chest:                               │
-│  │   ├─ Check if bomb already exists                    │
-│  │   ├─ Validate won't destroy items                    │
-│  │   ├─ Count chests that would be destroyed            │
-│  │   ├─ Find escape path after bombing                  │
-│  │   └─ BOMB + ESCAPE if safe                           │
-│  ├─ ELSE find best bombing position:                    │
-│  │   ├─ Score positions by chest count                  │
-│  │   ├─ Prefer positions destroying multiple chests     │
-│  │   └─ Path to best position                           │
+│  ├─ Find all breakable chests                            │
+│  ├─ IF adjacent to chest:                                │
+│  │   ├─ Check if bomb already exists                     │
+│  │   ├─ Validate won't destroy items                     │
+│  │   ├─ Count chests that would be destroyed             │
+│  │   ├─ Find escape path after bombing                   │
+│  │   └─ BOMB + ESCAPE if safe                            │
+│  ├─ ELSE find best bombing position:                     │
+│  │   ├─ Score positions by chest count                   │
+│  │   ├─ Prefer positions destroying multiple chests      │
+│  │   └─ Path to best position                            │
 │                                                          │
 │  PHASE 4: Target Prioritization ⚖️                       │
-│  ├─ Compare item path vs chest path                     │
-│  ├─ Apply ITEM_PRIORITY_BIAS (+5 steps)                 │
-│  ├─ Choose best target:                                 │
-│  │   └─ Items if path ≤ chest_path + 5                  │
-│  └─ Execute chosen path                                 │
+│  ├─ Compare item path vs chest path                      │
+│  ├─ Apply ITEM_PRIORITY_BIAS (+5 steps)                  │
+│  ├─ Choose best target:                                  │
+│  │   └─ Items if path ≤ chest_path + 5                   │
+│  └─ Execute chosen path                                  │
 │                                                          │
 │  PHASE 5: Enemy Pursuit 👤                               │
-│  ├─ IF no items/chests found                            │
-│  ├─ Find enemies on map                                 │
-│  ├─ IF adjacent to enemy:                               │
-│  │   ├─ Check won't destroy items                       │
-│  │   ├─ Validate escape exists                          │
-│  │   └─ BOMB + ESCAPE                                   │
-│  └─ ELSE path toward nearest enemy                      │
+│  ├─ IF no items/chests found                             │
+│  ├─ Find enemies on map                                  │
+│  ├─ IF adjacent to enemy:                                │
+│  │   ├─ Check won't destroy items                        │
+│  │   ├─ Validate escape exists                           │
+│  │   └─ BOMB + ESCAPE                                    │
+│  └─ ELSE path toward nearest enemy                       │
 │                                                          │
 │  PHASE 6: Exploration 🔍                                 │
-│  ├─ IF nothing else to do                               │
-│  ├─ Find unexplored map areas                           │
-│  └─ Move toward map center or random direction          │
+│  ├─ IF nothing else to do                                │
+│  ├─ Find unexplored map areas                            │
+│  └─ Move toward map center or random direction           │
 │                                                          │
 │  FINAL: Anti-Oscillation Check 🔄                        │
-│  ├─ Track last 2 decisions                              │
-│  ├─ Prevent staying in same position                    │
-│  └─ Return final action                                 │
+│  ├─ Track last 2 decisions                               │
+│  ├─ Prevent staying in same position                     │
+│  └─ Return final action                                  │
 │                                                          │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -233,7 +233,7 @@ findBestPath(map, start, targets, bombs, bombers, myUid, isEscaping)
 - **Features:**
   - Finds shortest path to targets
   - Tracks breakable walls blocking path
-  - Respects `bomberPassedThrough` flag
+  - Respects `walkable` flag
   - Avoids bomb danger zones (unless escaping)
 
 ```javascript
@@ -368,7 +368,7 @@ countChestsDestroyedByBomb(bx, by, map, range)
 #### **2. escapeStrategy.js** - Escape Logic
 
 ```javascript
-attemptEscape(map, player, activeBombs, bombers, myBomber, myUid)
+attemptEscape(map, player, bombs, bombers, myBomber, myUid)
 ```
 
 - **Flow:**
@@ -379,7 +379,7 @@ attemptEscape(map, player, activeBombs, bombers, myBomber, myUid)
   5. Return escape action
 
 ```javascript
-attemptEmergencyEscape(map, player, activeBombs, bombers, myBomber)
+attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
 ```
 
 - **3-Tier Fallback:**
@@ -506,7 +506,7 @@ shouldFightOrFlee(enemies, myBomber, myPos, resources)
 #### **9. bombValidator.js** - Safe Bombing
 
 ```javascript
-validateBombSafety(bombPos, map, activeBombs, bombers, myBomber, myUid)
+validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid)
 ```
 
 - **Pre-validates:** BEFORE placing bomb
