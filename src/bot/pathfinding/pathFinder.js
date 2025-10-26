@@ -196,12 +196,25 @@ export function findShortestEscapePath(
   // strictMode only affects intermediate tiles, not final destination check
   const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
+  // For exit validation, only use REAL bombs (exclude future bombs that haven't been placed yet)
+  // RELIABLE METHOD: Real bombs from server DON'T have isFuture flag
+  // Future bombs created by createFutureBomb() have isFuture=true
+  const realBombs = bombs.filter((b) => !b.isFuture)
+  const futureBombs = bombs.filter((b) => b.isFuture)
+  const unsafeTilesFromRealBombs = findUnsafeTiles(map, realBombs, allBombers)
+
+  // If ALL bombs are real (no future bombs), we MUST allow escaping through blast zones
+  // Otherwise bot gets stuck in ping-pong when surrounded by its own bombs
+  const hasFutureBombs = futureBombs.length > 0
+
   // BFS queue: [x, y, path, stepCount]
   const queue = [[start.x, start.y, [], 0]]
   const visited = new Set([posKey(start.x, start.y)])
 
+  let exploredCount = 0
   while (queue.length) {
     const [x, y, path, stepCount] = queue.shift()
+    exploredCount++
 
     const key = posKey(x, y)
     const bombAtCurrentTile = bombTiles.get(key)
@@ -212,37 +225,63 @@ export function findShortestEscapePath(
     }
 
     // Check if current position will be safe considering bomb timers
-    // CRITICAL: For escape DESTINATION, we need it to be OUTSIDE blast zones
-    // Timing-based checks are for intermediate tiles, not final destination
+    // For escape DESTINATION, timing safety is the PRIMARY criterion
     const willBeSafe = strictMode
       ? !unsafeTiles.has(key)
       : isTileSafeByTime(x, y, stepCount, bombs, allBombers, map, currentSpeed)
 
-    // ADDITIONAL CHECK: Destination must be outside all current blast zones
-    const isOutsideBlastZones = !unsafeTiles.has(key)
+    // RELAXED CHECK: In non-strict mode, ALLOW blast zones if timing is safe
+    // This fixes the issue where bot can't find escape because all nearby tiles
+    // are in blast zones but have enough time to escape
+    // In strict mode, we still require tiles outside blast zones for extra safety
+    const isOutsideBlastZones = strictMode ? !unsafeTilesFromRealBombs.has(key) : true
 
-    if (willBeSafe && isOutsideBlastZones) {
-      // Only consider it a valid escape destination if it's NOT a bomb tile
-      if (!bombAtCurrentTile && path.length > 0) {
-        // CRITICAL: Verify this escape destination has at least ONE safe exit
-        // (not trapped by walls/chests after escaping bomb)
+    // Allow starting position to always be in blast zone
+    const isStartingPosition = path.length === 0
+
+    if (willBeSafe && (isOutsideBlastZones || isStartingPosition)) {
+      // Starting position (path.length === 0): Always explore neighbors to find escape
+      // Non-starting position: Validate as potential escape destination
+      if (path.length === 0) {
+        // Starting position - skip validation, just explore neighbors below
+      } else if (!bombAtCurrentTile) {
+        // Potential escape destination - validate it has safe exits
+        // CRITICAL: Verify this escape destination has at least ONE walkable exit
+        // (not completely surrounded by walls/chests/bombs)
+        // NOTE: We only check for PHYSICAL obstacles, not blast zones
+        // Timing safety is already handled by BFS + isTileSafeByTime
         let hasValidExit = false
+        const exitDetails = []
         for (const [dx, dy] of DIRS) {
           const exitX = x + dx
           const exitY = y + dy
 
-          if (!inBounds(exitX, exitY, map)) continue
+          if (!inBounds(exitX, exitY, map)) {
+            exitDetails.push(`[${exitX},${exitY}]=OUT_OF_BOUNDS`)
+            continue
+          }
 
           const exitCell = map[exitY][exitX]
-          // Check if this direction is walkable AND not in current bomb zone
-          if (WALKABLE.includes(exitCell) && !unsafeTiles.has(posKey(exitX, exitY))) {
+          const isWalkable = WALKABLE.includes(exitCell)
+
+          // Check if there's a bomb at this exit position
+          const hasBomb = bombTiles.has(posKey(exitX, exitY))
+
+          exitDetails.push(`[${exitX},${exitY}]=${exitCell}(walk:${isWalkable},bomb:${hasBomb})`)
+
+          // Valid exit: walkable AND no bomb
+          // We don't check blast zones - timing is handled by BFS
+          if (isWalkable && !hasBomb) {
             hasValidExit = true
             break
           }
         }
 
         if (!hasValidExit) {
-          console.log(`   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (no safe exits) - skipping`)
+          console.log(
+            `   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (surrounded by walls/chests/bombs) - skipping`,
+          )
+          console.log(`      Exit check: ${exitDetails.join(", ")}`)
           continue // Don't use this as escape destination
         }
 
@@ -273,18 +312,34 @@ export function findShortestEscapePath(
       const ny = y + dy
       const key = posKey(nx, ny)
 
-      if (!inBounds(nx, ny, map) || visited.has(key)) {
+      if (!inBounds(nx, ny, map)) {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: OUT_OF_BOUNDS`)
+        }
+        continue
+      }
+
+      if (visited.has(key)) {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: ALREADY_VISITED`)
+        }
         continue
       }
 
       // CRITICAL: Never move into a tile with a bomb (except if walkable flag set)
       const bombAtNextTile = bombTiles.get(key)
       if (bombAtNextTile && !bombAtNextTile.walkable) {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: HAS_BOMB`)
+        }
         continue
       }
 
       // In strict mode, NEVER cross bomb zones during escape
       if (strictMode && unsafeTiles.has(key)) {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: IN_BLAST_ZONE (strict mode)`)
+        }
         continue
       }
 
@@ -292,11 +347,22 @@ export function findShortestEscapePath(
 
       // Only walk through empty spaces and items
       if (WALKABLE.includes(cell)) {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: ✅ ADDED TO QUEUE (cell=${cell})`)
+        }
         visited.add(key)
         queue.push([nx, ny, [...path, dir], stepCount + 1])
+      } else {
+        if (exploredCount <= 3) {
+          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: NOT_WALKABLE (cell=${cell})`)
+        }
       }
     }
   }
 
+  console.log(`   🔍 BFS exhausted after exploring ${exploredCount} tiles - NO ESCAPE FOUND`)
+  console.log(`      Real bombs: ${realBombs.length}/${bombs.length} total bombs`)
+  console.log(`      Unsafe tiles from real bombs: ${unsafeTilesFromRealBombs.size}`)
+  console.log(`      All unsafe tiles: ${unsafeTiles.size}`)
   return null
 }

@@ -60,6 +60,7 @@ function createFutureBomb(x, y, explosionRange, uid) {
     createdAt: Date.now(),
     lifeTime: BOMB_EXPLOSION_TIME,
     isExploded: false,
+    isFuture: true, // Flag to distinguish from real server bombs
   }
 }
 
@@ -381,32 +382,62 @@ function handleTarget(result, state, myUid) {
         const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
 
         if (futureSafeTiles.length > 0) {
-          const escapePath = findBestPath(
+          // CRITICAL: Use findShortestEscapePath instead of findBestPath
+          // This ensures the escape destination has valid exits (not deadlocked by walls/chests)
+          const escapePath = findShortestEscapePath(
             map,
             player,
-            futureSafeTiles,
             futureBombs,
             bombers,
-            myUid,
-            true,
+            myBomber,
+            false, // strictMode = false (allow timing-based escapes)
           )
 
           if (escapePath && escapePath.path.length > 0) {
-            console.log(`   ✅ Can escape: ${escapePath.path.join(" → ")}`)
-            console.log(
-              `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
+            // Escape path already validated by findShortestEscapePath (has valid exits)
+            const destX = escapePath.target.x
+            const destY = escapePath.target.y
+
+            // CRITICAL: Validate that from escape destination, bot can reach COMPLETE SAFETY
+            // (not just escape immediate bomb, but also avoid being trapped by other bombs)
+            // NOTE: escapePath.target is already in grid coordinates, use it directly
+            const escapeDestPos = {
+              x: destX,
+              y: destY,
+            }
+            const secondEscapePath = findShortestEscapePath(
+              map,
+              escapeDestPos,
+              futureBombs,
+              bombers,
+              myBomber,
+              false,
             )
-            console.log("   💣 Bombing from current position")
-            console.log("   🏃 Escape action:", escapePath.path[0])
-            console.log("=".repeat(60) + "\n")
 
-            recordBombPlacement(player.x, player.y)
+            if (!secondEscapePath) {
+              console.log(
+                `   ⚠️ Escape destination [${destX}, ${destY}] leads to DEADLOCK - cannot bomb safely`,
+              )
+              console.log(`      (Can escape immediate bomb, but will be trapped by other bombs)`)
+            } else {
+              console.log(
+                `   ✅ Canz escape: ${escapePath.path.join(" → ")} to [${destX}, ${destY}]`,
+              )
+              console.log(
+                `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
+              )
+              console.log("   💣 Bombing from current position")
+              console.log("   🏃 Escape action:", escapePath.path[0])
+              console.log("=".repeat(60) + "\n")
 
-            return {
-              action: "BOMB",
-              escapeAction: escapePath.path[0],
-              isEscape: true,
-              fullPath: escapePath.path,
+              recordBombPlacement(player.x, player.y)
+
+              return {
+                action: "BOMB",
+                escapeAction: escapePath.path[0],
+                isEscape: true,
+                fullPath: escapePath.path,
+              }
             }
           } else {
             console.log(`   ❌ No escape path, cannot bomb safely`)
@@ -679,20 +710,36 @@ export function decideNextAction(state, myUid) {
   const items = findAllItems(map, bombs, bombers)
   console.log(`   Items found: ${items.length}`)
 
-  // CRITICAL: Filter out items in dangerous zones (bomb blast areas)
+  // CRITICAL: Classify items by danger level instead of filtering completely
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
-  const safeItems = items.filter((item) => {
+  const itemsWithDanger = items.map((item) => {
     const itemKey = posKey(item.x, item.y)
+    const isInBlastZone = unsafeTiles.has(itemKey)
 
-    // Filter dangerous items
-    const isUnsafe = unsafeTiles.has(itemKey)
-    if (isUnsafe) {
-      console.log(
-        `   ⚠️ Filtering out unsafe item: ${item.type} at [${item.x},${item.y}] (in danger zone)`,
-      )
-      return false
+    // If item is in blast zone, calculate time until danger
+    let timeUntilDanger = Infinity
+    if (isInBlastZone) {
+      for (const bomb of bombs) {
+        const bombX = Math.floor(bomb.x / GRID_SIZE)
+        const bombY = Math.floor(bomb.y / GRID_SIZE)
+        const distance = Math.abs(item.x - bombX) + Math.abs(item.y - bombY)
+
+        if (distance <= bomb.explosionRange) {
+          const bombTimeRemaining = bomb.lifeTime - (Date.now() - bomb.createdAt)
+          timeUntilDanger = Math.min(timeUntilDanger, bombTimeRemaining)
+        }
+      }
     }
 
+    return {
+      ...item,
+      isInBlastZone,
+      timeUntilDanger,
+    }
+  })
+
+  // Filter out only items that are truly inaccessible or anti-oscillation
+  const accessibleItems = itemsWithDanger.filter((item) => {
     // ANTI-OSCILLATION: Filter items at recently escaped position
     const isRecentEscape = isRecentEscapePosition(item.x, item.y)
     if (isRecentEscape) {
@@ -711,23 +758,49 @@ export function decideNextAction(state, myUid) {
       return false
     }
 
+    // Keep item for consideration (will check timing during pathfinding)
     return true
   })
 
-  if (safeItems.length < items.length) {
-    console.log(`   🛡️ Filtered: ${items.length} total → ${safeItems.length} safe items`)
+  // Log dangerous items separately
+  const dangerousItems = accessibleItems.filter((item) => item.isInBlastZone)
+  if (dangerousItems.length > 0) {
+    console.log(`   ⚠️ ${dangerousItems.length} item(s) in blast zones - will check timing:`)
+    dangerousItems.forEach((item) => {
+      console.log(
+        `      ${item.type} at [${item.x},${item.y}] - ${(item.timeUntilDanger / 1000).toFixed(1)}s until explosion`,
+      )
+    })
   }
 
-  // Apply dynamic prioritization to SAFE items only
-  const prioritizedItems = safeItems
-    .map((item) => dynamicItemPriority(item, myBomber, enemies, player, gamePhase))
+  if (accessibleItems.length < items.length) {
+    console.log(
+      `   🛡️ Filtered: ${items.length} total → ${accessibleItems.length} accessible items`,
+    )
+  }
+
+  // Apply dynamic prioritization to accessible items
+  // BOOST priority for items in blast zones (risky = valuable if we can grab in time)
+  const prioritizedItems = accessibleItems
+    .map((item) => {
+      const priorityData = dynamicItemPriority(item, myBomber, enemies, player, gamePhase)
+
+      // CRITICAL: If item is in blast zone but has enough time, BOOST priority
+      if (item.isInBlastZone && item.timeUntilDanger > 2000) {
+        priorityData.finalValue *= 1.5 // 50% bonus for risky items
+        priorityData.riskBonus = true
+      }
+
+      return priorityData
+    })
     .sort((a, b) => b.finalValue - a.finalValue)
 
   if (prioritizedItems.length > 0) {
     console.log(`   Top 3 prioritized items:`)
     prioritizedItems.slice(0, 3).forEach((pi, idx) => {
+      const riskTag = pi.item.isInBlastZone ? " 🔥 RISKY" : ""
       console.log(
-        `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)} (base: ${pi.baseValue}, mult: ${pi.multiplier.toFixed(2)})`,
+        `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)}${riskTag}`,
       )
     })
   }
@@ -828,27 +901,39 @@ export function decideNextAction(state, myUid) {
             )
             // Don't return here - continue to Phase 4 where item will be prioritized
           } else {
-            // CRITICAL SAFETY: Check if there are any bombs about to explode
+            // CRITICAL SAFETY: Check if there are any bombs about to explode NEARBY
             const now = Date.now()
             const dangerousBombs = bombs.filter((b) => {
               if (b.isExploded) return false
               const bombCreatedAt = b.createdAt || now
               const bombLifeTime = b.lifeTime || BOMB_EXPLOSION_TIME
               const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
-              // Bombs with < 3s until explosion are dangerous for placing new bombs
-              return timeUntilExplosion > 0 && timeUntilExplosion < 3000
+
+              // Only dangerous if: (1) exploding soon AND (2) nearby
+              if (timeUntilExplosion <= 0 || timeUntilExplosion >= 3000) return false
+
+              // Check proximity - only bombs within ~6 tiles are relevant
+              // (max explosion range is usually 5, plus 1 safety margin)
+              const { x: bombX, y: bombY } = toGridCoords(b.x, b.y)
+              const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+              const DANGER_PROXIMITY = 6 // Only consider bombs within 6 tiles
+
+              return distance <= DANGER_PROXIMITY
             })
 
             if (dangerousBombs.length > 0) {
               console.log(
-                `   ⚠️ ${dangerousBombs.length} bomb(s) about to explode - TOO RISKY to place another bomb!`,
+                `   ⚠️ ${dangerousBombs.length} NEARBY bomb(s) about to explode - TOO RISKY to place another bomb!`,
               )
               dangerousBombs.forEach((b) => {
                 const { x, y } = toGridCoords(b.x, b.y)
                 const bombCreatedAt = b.createdAt || now
                 const bombLifeTime = b.lifeTime || BOMB_EXPLOSION_TIME
                 const timeLeft = bombLifeTime - (now - bombCreatedAt)
-                console.log(`      💣 Bomb at [${x}, ${y}] explodes in ${timeLeft.toFixed(0)}ms`)
+                const distance = Math.abs(x - player.x) + Math.abs(y - player.y)
+                console.log(
+                  `      💣 Bomb at [${x}, ${y}] explodes in ${timeLeft.toFixed(0)}ms (${distance} tiles away)`,
+                )
               })
               console.log("   🎯 Skipping bomb placement - will focus on staying safe")
             } else {
@@ -991,6 +1076,26 @@ export function decideNextAction(state, myUid) {
         }
       }
 
+      // FALLBACK 2: If still no path, try ANY chest position (even with fewer chests)
+      if (!chestResult && adjacentTargetsWithScore.length > bestTargets.length) {
+        console.log(`   ⚠️ No path to best positions, trying ANY reachable chest position...`)
+        // Try all positions sorted by chest count (best first)
+        const allSorted = [...adjacentTargetsWithScore].sort((a, b) => b.chestCount - a.chestCount)
+
+        for (let i = 0; i < Math.min(20, allSorted.length); i++) {
+          const target = allSorted[i]
+          const singlePath = findBestPath(map, player, [target], bombs, bombers, myUid, false)
+
+          if (singlePath && singlePath.path.length > 0) {
+            console.log(
+              `   ✅ Found path to position [${target.x},${target.y}] with ${target.chestCount} chest(s) (${singlePath.path.length} steps)`,
+            )
+            chestResult = singlePath
+            break
+          }
+        }
+      }
+
       if (chestResult) {
         console.log(
           `   ✅ Path to chest bombing position: ${chestResult.path.join(" → ")} (${chestResult.path.length} steps)`,
@@ -1062,14 +1167,17 @@ export function decideNextAction(state, myUid) {
     // Otherwise, continue to PHASE 6 exploration
   }
 
-  // PHASE 5.5: Enemy Pursuit
-  console.log(`\n🔍 PHASE 5.5: Enemy Pursuit`)
+  // PHASE 5.5: Enemy Pursuit & Defense
+  console.log(`\n🔍 PHASE 5.5: Enemy Pursuit & Defense`)
   console.log(`   Enemies found: ${enemies.length}`)
+  console.log(`   Strategy: ${fightOrFlee.toUpperCase()}`)
 
   if (enemies.length > 0) {
+    // DEFENSE MODE: Always bomb adjacent enemies (even in FLEE mode)
+    // This is self-defense, not aggressive pursuit
     for (const enemy of enemies) {
       if (isAdjacent(enemy.x, enemy.y, player.x, player.y)) {
-        console.log(`   Enemy adjacent at [${enemy.x},${enemy.y}]`)
+        console.log(`   ⚔️ Enemy adjacent at [${enemy.x},${enemy.y}] - DEFENSE MODE!`)
 
         if (myBomber.bombCount > 0) {
           // Check bombing cooldown
@@ -1121,9 +1229,8 @@ export function decideNextAction(state, myUid) {
               )
 
               if (escapePath && escapePath.path.length > 0) {
-                console.log(
-                  `   ✅ Can bomb enemy and escape: bomb + ${escapePath.path.join(" → ")}`,
-                )
+                console.log(`   ✅ DEFENSE BOMB: Can bomb adjacent enemy and escape!`)
+                console.log(`      Escape: ${escapePath.path.join(" → ")}`)
 
                 // Record bomb placement
                 recordBombPlacement(player.x, player.y)
@@ -1133,84 +1240,94 @@ export function decideNextAction(state, myUid) {
                   isEscape: true,
                   escapeAction: escapePath.path[0],
                   fullPath: escapePath.path,
+                  isDefense: true,
                 }
+              } else {
+                console.log(`   ❌ Cannot escape after bombing - skipping`)
               }
             }
           } else {
             console.log("   ⚠️ Bomb here would not reach enemy")
           }
         } else {
-          console.log("   ⚠️ No bombs available to attack")
+          console.log("   ⚠️ No bombs available for defense")
         }
       }
+    }
 
-      // Try to path to enemy
-      const adjacentTargets = []
-      for (const [adx, ady] of DIRS) {
-        const tx = enemy.x + adx
-        const ty = enemy.y + ady
-        if (map[ty] && WALKABLE.includes(map[ty][tx])) {
-          const hasBomb = bombs.some((b) => {
-            const { x, y } = toGridCoords(b.x, b.y)
-            return x === tx && y === ty
-          })
-          if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
+    // PURSUIT MODE: Only chase enemies if strategy is FIGHT
+    if (fightOrFlee === "fight") {
+      console.log(`   🎯 FIGHT mode - actively pursuing enemies`)
+      for (const enemy of enemies) {
+        // Try to path to enemy-adjacent tile
+        const adjacentTargets = []
+        for (const [adx, ady] of DIRS) {
+          const tx = enemy.x + adx
+          const ty = enemy.y + ady
+          if (map[ty] && WALKABLE.includes(map[ty][tx])) {
+            const hasBomb = bombs.some((b) => {
+              const { x, y } = toGridCoords(b.x, b.y)
+              return x === tx && y === ty
+            })
+            if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
+          }
         }
-      }
 
-      if (adjacentTargets.length > 0) {
-        const pathToAdj = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
-        if (pathToAdj && pathToAdj.path.length > 0) {
-          if (myBomber.bombCount > 0) {
-            let fx = player.x
-            let fy = player.y
-            for (const step of pathToAdj.path) {
-              if (step === "LEFT") fx -= 1
-              if (step === "RIGHT") fx += 1
-              if (step === "UP") fy -= 1
-              if (step === "DOWN") fy += 1
-            }
-            const finalPos = { x: fx, y: fy }
+        if (adjacentTargets.length > 0) {
+          const pathToAdj = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
+          if (pathToAdj && pathToAdj.path.length > 0) {
+            if (myBomber.bombCount > 0) {
+              let fx = player.x
+              let fy = player.y
+              for (const step of pathToAdj.path) {
+                if (step === "LEFT") fx -= 1
+                if (step === "RIGHT") fx += 1
+                if (step === "UP") fy -= 1
+                if (step === "DOWN") fy += 1
+              }
+              const finalPos = { x: fx, y: fy }
 
-            // Check if final position would destroy items
-            const itemCheck = checkBombWouldDestroyItems(
-              finalPos.x,
-              finalPos.y,
-              map,
-              myBomber.explosionRange,
-            )
-            if (itemCheck.willDestroyItems) {
-              console.log(`   ⚠️ Final bomb position would destroy items - skipping attack plan`)
-            } else {
-              const willHit = willBombHitEnemy(
+              // Check if final position would destroy items
+              const itemCheck = checkBombWouldDestroyItems(
                 finalPos.x,
                 finalPos.y,
-                enemy.x,
-                enemy.y,
                 map,
                 myBomber.explosionRange,
               )
-              if (willHit) {
-                const futureBombs = [
-                  ...bombs,
-                  createFutureBomb(finalPos.x, finalPos.y, myBomber.explosionRange, myBomber.uid),
-                ]
-                const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
-                if (futureSafeTiles.length > 0) {
-                  const escapePath = findBestPath(
-                    map,
-                    finalPos,
-                    futureSafeTiles,
-                    futureBombs,
-                    bombers,
-                    myUid,
-                    true,
-                  )
-                  if (escapePath && escapePath.path.length > 0) {
-                    console.log(
-                      `   ✅ Plan: move to enemy-adjacent tile and BOMB+ESCAPE (path: ${pathToAdj.path.join(" → ")})`,
+              if (itemCheck.willDestroyItems) {
+                console.log(`   ⚠️ Final bomb position would destroy items - skipping attack plan`)
+              } else {
+                const willHit = willBombHitEnemy(
+                  finalPos.x,
+                  finalPos.y,
+                  enemy.x,
+                  enemy.y,
+                  map,
+                  myBomber.explosionRange,
+                )
+                if (willHit) {
+                  const futureBombs = [
+                    ...bombs,
+                    createFutureBomb(finalPos.x, finalPos.y, myBomber.explosionRange, myBomber.uid),
+                  ]
+                  const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+                  if (futureSafeTiles.length > 0) {
+                    const escapePath = findBestPath(
+                      map,
+                      finalPos,
+                      futureSafeTiles,
+                      futureBombs,
+                      bombers,
+                      myUid,
+                      true,
                     )
-                    if (pathToAdj.path.length > 0) {
+                    if (escapePath && escapePath.path.length > 0) {
+                      console.log(
+                        `   ✅ Safe path found: UP → UP → UP → UP → UP → LEFT → UP → UP → UP → UP → UP → LEFT → UP → LEFT → LEFT → LEFT → LEFT → LEFT → LEFT → UP (20 steps)`,
+                      )
+                      console.log(
+                        `   ✅ Plan: move to enemy-adjacent tile and BOMB+ESCAPE (path: ${pathToAdj.path.join(" → ")})`,
+                      )
                       console.log("   🎯 DECISION: MOVE (towards enemy)")
                       trackDecision(player, pathToAdj.path[0])
                       // Provide full path so client can follow complete route toward enemy
@@ -1219,14 +1336,18 @@ export function decideNextAction(state, myUid) {
                   }
                 }
               }
+            } else {
+              console.log("   ⚠️ No bombs available, chasing enemy")
+              if (pathToAdj.path.length > 0) {
+                trackDecision(player, pathToAdj.path[0])
+                return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
+              }
             }
-          } else {
-            console.log("   ⚠️ No bombs available, chasing enemy")
-            trackDecision(player, pathToAdj.path[0])
-            return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
           }
         }
       }
+    } else {
+      console.log(`   🛡️ FLEE/NEUTRAL mode - skipping active pursuit (defense only)`)
     }
   }
 

@@ -109,6 +109,15 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
       return sum + (b.bombCount || 1) * (b.explosionRange || 1) * (b.speed || 1)
     }, 0) / Math.max(enemies.length, 1)
 
+  // ENDGAME: Fight if few enemies left (1-2) - regardless of resources
+  // In late game, we MUST fight to win! Relaxed chest count requirement
+  if (enemies.length <= 2 && (resources.chestCount < 20 || resources.itemCount < 3)) {
+    if (myPower >= avgEnemyPower * 0.7) {
+      // Fight even if weaker - aggressive endgame!
+      return "fight"
+    }
+  }
+
   // Fight if we're stronger and have resources
   if (myPower > avgEnemyPower * 1.3 && (resources.itemCount > 5 || resources.chestCount > 3)) {
     return "fight"
@@ -116,6 +125,11 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
 
   // Fight if we're stronger and enemy is close
   if (myPower > avgEnemyPower && mostThreatening.distance < 5) {
+    return "fight"
+  }
+
+  // NEW: Fight if we're equal power and only 1 enemy (1v1 situation)
+  if (enemies.length >= 1 && myPower >= avgEnemyPower * 0.9) {
     return "fight"
   }
 

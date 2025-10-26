@@ -59,10 +59,20 @@ export function findPrioritizedEscapeDirection(map, start, bombs, allBombers, my
     return null
   }
 
+  // CRITICAL: Filter out directions with NEGATIVE time margin (bot will die)
+  const viableDirections = directionScores.filter((d) => d.timeMargin > 0)
+
+  if (viableDirections.length === 0) {
+    console.log("   ❌ All directions have negative time margin - NO VIABLE ESCAPE!")
+    console.log("   🚨 Bot is likely already dead or will die regardless of direction")
+    // Return null instead of picking a death direction
+    return null
+  }
+
   // Sort by priority:
   // 1. Among tiles in danger, prefer HIGHER time margin (slower bomb) - STRATEGIC WAIT
   // 2. Safe tiles are preferred only if danger tiles have insufficient time
-  directionScores.sort((a, b) => {
+  viableDirections.sort((a, b) => {
     // STRATEGIC PRIORITY: If both are in danger zones, choose the slower-exploding one
     // This allows "waiting" in slow-bomb zone to avoid fast-bomb zone
     if (a.isInDanger && b.isInDanger) {
@@ -84,10 +94,10 @@ export function findPrioritizedEscapeDirection(map, start, bombs, allBombers, my
     return b.timeMargin - a.timeMargin
   })
 
-  const best = directionScores[0]
+  const best = viableDirections[0]
 
   console.log("   🎯 Escape direction priorities (by bomb timing):")
-  directionScores.forEach((d, i) => {
+  viableDirections.forEach((d, i) => {
     const icon = i === 0 ? "✅" : "  "
     const dangerIcon = d.isInDanger ? "⚠️" : "✓"
     const marginStr =
