@@ -55,6 +55,26 @@ function placeBomb() {
 }
 
 /**
+ * Execute escape sequence after bomb placement is confirmed
+ */
+function executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath) {
+  // After placing a bomb, start the full escape sequence if available
+  if (isEscape && fullPath && fullPath.length > 0) {
+    pathModeManager.startEscape(fullPath)
+    const firstMove = pathModeManager.getNextEscapeMove()
+    setTimeout(() => {
+      smoothMove(firstMove, true)
+    }, STEP_DELAY)
+  } else if (isEscape && escapeAction && ["UP", "DOWN", "LEFT", "RIGHT"].includes(escapeAction)) {
+    // Fallback: single escape move if no full path
+    console.log(`🏃 Escaping after bomb: ${escapeAction}`)
+    setTimeout(() => {
+      smoothMove(escapeAction)
+    }, STEP_DELAY)
+  }
+}
+
+/**
  * Execute smooth movement to next grid cell
  */
 async function smoothMove(direction, isEscapeMove = false) {
@@ -319,24 +339,32 @@ function makeDecision() {
     if (action === "BOMB") {
       placeBomb()
 
-      // After placing a bomb, start the full escape sequence if available
-      if (isEscape && fullPath && fullPath.length > 0) {
-        pathModeManager.startEscape(fullPath)
-        const firstMove = pathModeManager.getNextEscapeMove()
-        setTimeout(() => {
-          smoothMove(firstMove, true)
-        }, STEP_DELAY)
-      } else if (
-        isEscape &&
-        escapeAction &&
-        ["UP", "DOWN", "LEFT", "RIGHT"].includes(escapeAction)
-      ) {
-        // Fallback: single escape move if no full path
-        console.log(`🏃 Escaping after bomb: ${escapeAction}`)
-        setTimeout(() => {
-          smoothMove(escapeAction)
-        }, STEP_DELAY)
+      // CRITICAL: Wait for server to confirm bomb placement before escaping
+      // Otherwise bot might move before bomb is placed, causing deadlock
+      let escapeExecuted = false
+
+      const bombPlacementTimeout = setTimeout(() => {
+        if (!escapeExecuted) {
+          console.log("⚠️  Bomb placement timeout - proceeding with escape anyway")
+          escapeExecuted = true
+          executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath)
+        }
+      }, 500) // Max 500ms wait for server confirmation
+
+      // Set up one-time listener for bomb confirmation
+      const bombConfirmHandler = (bomb) => {
+        // Only proceed if this is OUR bomb and we haven't escaped yet
+        if (bomb.uid === gameContext.myUid && !escapeExecuted) {
+          clearTimeout(bombPlacementTimeout)
+          console.log("✅ Bomb confirmed at current position - proceeding with escape")
+          escapeExecuted = true
+          executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath)
+        }
       }
+
+      // Use once() to auto-remove listener after first trigger
+      socket.once("new_bomb", bombConfirmHandler)
+
       return
     }
 

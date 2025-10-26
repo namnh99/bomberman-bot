@@ -21,8 +21,15 @@ const ESCAPE_REVERSAL_COOLDOWN_MS = 2000
 export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   console.log(`   🚨 UNSAFE at [${player.x}, ${player.y}]! Finding escape route...`)
 
+  // Filter to only relevant bombs (nearby bombs that affect the bot)
+  const relevantBombs = bombs.filter((bomb) => {
+    if (bomb.isExploded) return false
+    const distance = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
+    return distance <= 8 // Only consider bombs within 8 tiles
+  })
+
   // Check for bomb chains first
-  if (bombs.length >= 3) {
+  if (relevantBombs.length >= 3) {
     const chains = detectBombChains(bombs, bombers, map)
     if (chains.length > 0) {
       console.log(`   ⚠️ Detected ${chains.length} bomb chain(s)!`)
@@ -46,7 +53,7 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   // 1. Move to position safe from FASTEST bomb
   // 2. Wait for it to explode
   // 3. Then escape from remaining bombs (easier terrain, better timing)
-  if (bombs.length >= 2) {
+  if (relevantBombs.length >= 2) {
     // NOTE: player is already in grid coordinates (converted in agent.js)
     const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
 
@@ -208,7 +215,7 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   }
 
   // FALLBACK: If path-based escape fails in multi-bomb zone, try timing-based direction
-  if (bombs.length >= 2) {
+  if (relevantBombs.length >= 2) {
     console.log(`   🕐 Path-based escape failed - trying timing-optimized direction...`)
 
     // Check if bot is trapped by enemies
@@ -284,9 +291,19 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
   const currentSpeed = myBomber.speed || 1
 
-  // CRITICAL: Prevent oscillation - don't go back to recent positions
-  const recentEscapes = [] // Will be populated from escape tracking
-  const currentPos = posKey(player.x, player.y)
+  // ANTI PING-PONG: Don't reverse direction immediately
+  const now = Date.now()
+  const shouldAvoidReversal = now - lastEscapeTime < ESCAPE_REVERSAL_COOLDOWN_MS
+
+  if (shouldAvoidReversal && lastEscapeFrom && lastEscapeTo) {
+    const wouldReverse =
+      posKey(player.x, player.y) === lastEscapeTo && posKey(lastEscapeFrom) === lastEscapeFrom
+    if (wouldReverse) {
+      console.log(
+        `   🔄 ANTI-PING-PONG: Avoiding reversal from [${lastEscapeTo}] back to [${lastEscapeFrom}]`,
+      )
+    }
+  }
 
   // Calculate "best" direction - prefer moving AWAY from bombs, not towards them
   const bombDistances = new Map()
@@ -306,6 +323,7 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
   }
 
   // First pass: time-safe tiles - prioritize those FARTHER from bombs
+  // EMERGENCY MODE: Use minimal buffers to find ANY possible escape
   const timeSafeMoves = []
   for (const [dx, dy, dir] of DIRS) {
     const nx = player.x + dx
@@ -319,7 +337,8 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
       return x === nx && y === ny
     })
 
-    const willBeSafe = isTileSafeByTime(nx, ny, 1, bombs, bombers, map, currentSpeed)
+    // CRITICAL: Use EMERGENCY MODE (minimal buffers) for desperate situations
+    const willBeSafe = isTileSafeByTime(nx, ny, 1, bombs, bombers, map, currentSpeed, true)
 
     if (willBeSafe && !isBombTile) {
       timeSafeMoves.push({ dir, nx, ny, dist: bombDistances.get(dir) })
@@ -329,14 +348,28 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
   // Sort by distance from bombs (prefer farther)
   timeSafeMoves.sort((a, b) => b.dist - a.dist)
 
-  if (timeSafeMoves.length > 0) {
-    const best = timeSafeMoves[0]
+  // ANTI-PING-PONG: Filter out reversal moves (check BOTH lastEscapeFrom and lastEscapeTo)
+  const nonReversalMoves = shouldAvoidReversal
+    ? timeSafeMoves.filter((m) => {
+        const targetKey = posKey(m.nx, m.ny)
+        // Don't go back to EITHER the previous position OR the one before that
+        return targetKey !== lastEscapeFrom && targetKey !== lastEscapeTo
+      })
+    : timeSafeMoves
+
+  if (nonReversalMoves.length > 0) {
+    const best = nonReversalMoves[0]
     console.log(
       `   ✅ Time-safe emergency move: ${best.dir} to [${best.nx}, ${best.ny}] (${best.dist} tiles from nearest bomb)`,
     )
     console.log("🎯 DECISION: EMERGENCY ESCAPE (time-safe tile)")
     console.log("   Action:", best.dir)
     console.log("=".repeat(90) + "\n")
+
+    // Track escape for anti-ping-pong (shift the history)
+    lastEscapeFrom = lastEscapeTo // Previous destination becomes old position
+    lastEscapeTo = posKey(best.nx, best.ny) // New destination
+    lastEscapeTime = now
 
     return { action: best.dir }
   }
@@ -394,8 +427,17 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
   desperateMoves.sort((a, b) => b.dist - a.dist)
 
-  if (desperateMoves.length > 0) {
-    const best = desperateMoves[0]
+  // ANTI-PING-PONG: Filter desperate moves too
+  const nonReversalDesperateMoves = shouldAvoidReversal
+    ? desperateMoves.filter((m) => {
+        const targetKey = posKey(m.nx, m.ny)
+        // Don't go back to EITHER the previous position OR the one before that
+        return targetKey !== lastEscapeFrom && targetKey !== lastEscapeTo
+      })
+    : desperateMoves
+
+  if (nonReversalDesperateMoves.length > 0) {
+    const best = nonReversalDesperateMoves[0]
     console.log(
       `   🚨 DESPERATE: Moving ${best.dir} to [${best.nx}, ${best.ny}] (${best.dist} tiles from bomb, STILL IN DANGER!)`,
     )
@@ -403,7 +445,36 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
     console.log("   Action:", best.dir)
     console.log("=".repeat(90) + "\n")
 
+    // Track escape for anti-ping-pong (shift the history)
+    lastEscapeFrom = lastEscapeTo // Previous destination becomes old position
+    lastEscapeTo = posKey(best.nx, best.ny) // New destination
+    lastEscapeTime = now
+
     return { action: best.dir }
+  }
+
+  // If ALL moves are blocked by anti-ping-pong, we're truly stuck in a deadlock
+  // In this case, STAYING is better than ping-ponging (wastes time, same death)
+  if (desperateMoves.length > 0) {
+    console.log(
+      `   ⛔ DEADLOCK: Trapped in ${desperateMoves.length}-tile corridor, all moves cause ping-pong!`,
+    )
+    console.log(`      Current: [${player.x}, ${player.y}]`)
+    console.log(`      Last escape: [${lastEscapeFrom}] → [${lastEscapeTo}]`)
+    console.log(
+      `      Available moves would be: ${desperateMoves.map((m) => `${m.dir} to [${m.nx},${m.ny}]`).join(", ")}`,
+    )
+    console.log(`   🛑 STAYING PUT - accepting fate rather than wasting time ping-ponging`)
+    console.log("🎯 DECISION: EMERGENCY ESCAPE (deadlock - staying)")
+    console.log("   Action: null (STAY)")
+    console.log("=".repeat(90) + "\n")
+
+    // Reset anti-ping-pong tracking to allow future escapes if bombs explode
+    lastEscapeFrom = null
+    lastEscapeTo = null
+    lastEscapeTime = 0
+
+    return null // STAY - don't move
   }
 
   return null

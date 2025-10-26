@@ -11,6 +11,20 @@ import { findBestPath } from "../pathfinding/index.js"
 export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber) {
   console.log(`   🔍 Advanced Escape Analysis (${bombs.length} bombs active)`)
 
+  // Filter to only relevant bombs (nearby bombs that affect the bot)
+  const relevantBombs = bombs.filter((bomb) => {
+    if (bomb.isExploded) return false
+    const distance = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
+    return distance <= 8 // Only consider bombs within 8 tiles
+  })
+
+  if (relevantBombs.length === 0) {
+    console.log(`   ℹ️ No nearby bombs affecting escape`)
+    return null
+  }
+
+  console.log(`   📊 ${relevantBombs.length} nearby bomb(s) out of ${bombs.length} total`)
+
   // Get danger timeline
   const timeline = calculateDangerTimeline(bombs, allBombers, map)
   const now = Date.now()
@@ -70,7 +84,7 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
   )
 
   // Use timed pathfinding for complex scenarios
-  if (bombs.length >= 3) {
+  if (relevantBombs.length >= 3) {
     const timedPath = findSafestTimedPath(
       player,
       bestTile.tile,

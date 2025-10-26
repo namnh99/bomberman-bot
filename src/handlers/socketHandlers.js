@@ -157,6 +157,8 @@ export function registerSocketHandlers(
     gameContext.currentState.chests = data.chests
     gameContext.currentState.items = data.items
   })
+
+  socket.on()
 }
 
 /**

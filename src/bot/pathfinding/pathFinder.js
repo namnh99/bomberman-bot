@@ -246,43 +246,79 @@ export function findShortestEscapePath(
         // Starting position - skip validation, just explore neighbors below
       } else if (!bombAtCurrentTile) {
         // Potential escape destination - validate it has safe exits
-        // CRITICAL: Verify this escape destination has at least ONE walkable exit
-        // (not completely surrounded by walls/chests/bombs)
-        // NOTE: We only check for PHYSICAL obstacles, not blast zones
-        // Timing safety is already handled by BFS + isTileSafeByTime
-        let hasValidExit = false
-        const exitDetails = []
-        for (const [dx, dy] of DIRS) {
-          const exitX = x + dx
-          const exitY = y + dy
+        // CRITICAL: Check if this tile is OUTSIDE ALL BLAST ZONES (including future bombs!)
+        // If yes, bot can safely STAY here without needing further exits
+        // MUST use unsafeTiles (all bombs) NOT unsafeTilesFromRealBombs (real only)
+        const isOutsideAllBlastZones = !unsafeTiles.has(key)
 
-          if (!inBounds(exitX, exitY, map)) {
-            exitDetails.push(`[${exitX},${exitY}]=OUT_OF_BOUNDS`)
-            continue
-          }
-
-          const exitCell = map[exitY][exitX]
-          const isWalkable = WALKABLE.includes(exitCell)
-
-          // Check if there's a bomb at this exit position
-          const hasBomb = bombTiles.has(posKey(exitX, exitY))
-
-          exitDetails.push(`[${exitX},${exitY}]=${exitCell}(walk:${isWalkable},bomb:${hasBomb})`)
-
-          // Valid exit: walkable AND no bomb
-          // We don't check blast zones - timing is handled by BFS
-          if (isWalkable && !hasBomb) {
-            hasValidExit = true
-            break
-          }
-        }
-
-        if (!hasValidExit) {
+        if (isOutsideAllBlastZones) {
+          // Tile is outside all blast zones - bot can stay here safely!
           console.log(
-            `   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (surrounded by walls/chests/bombs) - skipping`,
+            `   ✅ Escape tile [${x}, ${y}] is OUTSIDE all blast zones - safe to stay (no exit check needed)`,
           )
-          console.log(`      Exit check: ${exitDetails.join(", ")}`)
-          continue // Don't use this as escape destination
+        } else {
+          // Tile is in blast zone - MUST verify it has timing-safe exits
+          // CRITICAL: Verify this escape destination has at least ONE walkable exit
+          // that will also be TIMING-SAFE when bot arrives
+          // This prevents escaping to dead-ends where bot gets trapped later
+          let hasValidExit = false
+          const exitDetails = []
+
+          // Assume bot needs 1 more step to exit from this position
+          const exitStepCount = stepCount + 1
+
+          for (const [dx, dy, dirName] of DIRS) {
+            const exitX = x + dx
+            const exitY = y + dy
+
+            if (!inBounds(exitX, exitY, map)) {
+              exitDetails.push(`[${exitX},${exitY}]=OUT_OF_BOUNDS`)
+              continue
+            }
+
+            const exitCell = map[exitY][exitX]
+            const isWalkable = WALKABLE.includes(exitCell)
+
+            // Check if there's a bomb at this exit position
+            const hasBomb = bombTiles.has(posKey(exitX, exitY))
+
+            // CRITICAL: Check if exit is OUTSIDE blast zones
+            // If yes, it's ALWAYS valid (bot can stay there safely)
+            const exitOutsideBlastZones = !unsafeTiles.has(posKey(exitX, exitY))
+
+            // CRITICAL: Check if this exit will be timing-safe when bot can reach it
+            // This prevents escaping to tiles that become dead-ends
+            const exitTimingSafe = isTileSafeByTime(
+              exitX,
+              exitY,
+              exitStepCount,
+              bombs,
+              allBombers,
+              map,
+              currentSpeed,
+            )
+
+            exitDetails.push(
+              `[${exitX},${exitY}]=${exitCell}(walk:${isWalkable},bomb:${hasBomb},outside:${exitOutsideBlastZones},timingSafe:${exitTimingSafe})`,
+            )
+
+            // Valid exit conditions:
+            // 1. Walkable AND no bomb AND (OUTSIDE blast zones OR timing-safe)
+            // This allows escaping to tiles in blast zones IF timing is safe
+            // OR escaping to tiles outside blast zones (always safe)
+            if (isWalkable && !hasBomb && (exitOutsideBlastZones || exitTimingSafe)) {
+              hasValidExit = true
+              break
+            }
+          }
+
+          if (!hasValidExit) {
+            console.log(
+              `   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (no timing-safe exits available) - skipping`,
+            )
+            console.log(`      Exit check: ${exitDetails.join(", ")}`)
+            continue // Don't use this as escape destination
+          }
         }
 
         // Calculate detailed timing for the escape path

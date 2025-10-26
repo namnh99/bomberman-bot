@@ -11,6 +11,7 @@ import {
 import { toGridCoords, posKey, isAdjacent, inBounds } from "../utils/gridUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
+import { findSafeWaitingPosition } from "./strategy/stagedEscape.js"
 import {
   findAllItems,
   findAllChests,
@@ -25,16 +26,10 @@ import {
   dynamicItemPriority,
   calculateRiskTolerance,
   determineGamePhase,
-  predictEnemyPositions,
-  evaluatePathDanger,
   findChainReactionOpportunities,
   isChainReactionWorthwhile,
-  evaluateZoneControl,
-  scoreEnemyThreat,
-  findMostThreateningEnemy,
   shouldFightOrFlee,
   validateBombSafety,
-  findMultiTargetPath,
   compareSingleVsMultiTarget,
 } from "./strategy/index.js"
 import { findAdvancedEscapePath } from "./strategy/advancedEscape.js"
@@ -448,12 +443,13 @@ function handleTarget(result, state, myUid) {
       } // End of else block - only bomb if won't destroy items
     }
     // If we reach here, no valid bomb action found at this position
+    // Return null to let main function continue to exploration
   }
 
-  console.log("🎯 DECISION: STAY (No valid action)")
+  console.log("   ℹ️ No valid bomb action at current position")
   console.log("=".repeat(60) + "\n")
-  trackDecision(player, "STAY")
-  return { action: "STAY" }
+  // Don't STAY - return null to continue to exploration phase
+  return null
 }
 
 /**
@@ -547,12 +543,50 @@ export function decideNextAction(state, myUid) {
   console.log("\n🔍 PHASE 1: Safety Check")
   const { isPlayerSafe, safeTiles } = checkSafety(map, player, bombs, bombers, myBomber)
 
+  // CRITICAL: Check staged escape EVEN WHEN SAFE for multi-bomb scenarios
+  // Bot might be safe NOW but moving could put it in danger
+  // Only consider bombs that are actually affecting the bot (nearby or in blast range)
+  const relevantBombs = bombs.filter((bomb) => {
+    if (bomb.isExploded) return false
+    const { x: bx, y: by } = bomb
+    const distance = Math.abs(bx - player.x) + Math.abs(by - player.y)
+    // Consider bombs within reasonable distance (e.g., 8 tiles)
+    // This covers bombs that could affect pathfinding or safety
+    return distance <= 8
+  })
+
+  if (relevantBombs.length >= 2) {
+    console.log(
+      `   🕐 Multi-bomb scenario detected (${relevantBombs.length} nearby bombs out of ${bombs.length} total) - checking staged escape`,
+    )
+
+    // Check if staying in place is the best option
+    const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
+
+    if (waitStrategy && waitStrategy.isStayingInPlace) {
+      // STAY is the best option - current position safe from fastest bomb
+      console.log(`   💡 STAGED ESCAPE: STAY at [${player.x}, ${player.y}]`)
+      console.log(`      ${waitStrategy.reason}`)
+      console.log(`      ⏱️  Wait time: ${(waitStrategy.waitTime / 1000).toFixed(1)}s`)
+      console.log(`      Current safety: ${isPlayerSafe ? "SAFE" : "UNSAFE"}`)
+      console.log(`🎯 DECISION: STAGED WAIT (stay and let bombs explode)`)
+      console.log("=".repeat(90) + "\n")
+      trackDecision(player, "STAY")
+      if (!isPlayerSafe) trackEscape(player.x, player.y)
+      return {
+        action: "STAY",
+        isEscape: !isPlayerSafe,
+        isWaitingStrategy: true,
+        waitPosition: waitStrategy.waitPosition,
+        waitTime: waitStrategy.waitTime,
+      }
+    }
+  }
+
   if (!isPlayerSafe) {
-    // For multi-bomb scenarios (2+ bombs), use advanced timing-based escape
-    if (bombs.length >= 2) {
-      console.log(
-        `   🕐 Multi-bomb scenario detected (${bombs.length} bombs) - using advanced escape`,
-      )
+    // For multi-bomb scenarios (2+ bombs), try advanced timing escape
+    if (relevantBombs.length >= 2) {
+      console.log(`   🕐 Staged escape requires movement - trying advanced timing escape`)
       const advancedEscape = findAdvancedEscapePath(player, map, bombs, bombers, myBomber)
 
       if (advancedEscape && advancedEscape.path && advancedEscape.path.length > 0) {
@@ -703,6 +737,112 @@ export function decideNextAction(state, myUid) {
         }
       }
     }
+  }
+
+  // PHASE 1.7: Aggressive Enemy Pursuit (HIGH PRIORITY - before items/chests)
+  // This phase runs BEFORE item/chest collection to prioritize combat
+  if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
+    console.log("\n🔍 PHASE 1.7: Aggressive Enemy Pursuit (Priority)")
+
+    for (const enemy of enemies) {
+      const distance = Math.abs(enemy.x - player.x) + Math.abs(enemy.y - player.y)
+
+      // ULTRA AGGRESSIVE: Pursue enemies within 12 tiles (was 8)
+      if (distance <= 12) {
+        console.log(`   🎯 Pursuing enemy at [${enemy.x},${enemy.y}] (distance: ${distance})`)
+
+        // Find adjacent tiles to enemy
+        const adjacentTargets = []
+        for (const [adx, ady] of DIRS) {
+          const tx = enemy.x + adx
+          const ty = enemy.y + ady
+          if (map[ty] && WALKABLE.includes(map[ty][tx])) {
+            const hasBomb = bombs.some((b) => {
+              const { x, y } = toGridCoords(b.x, b.y)
+              return x === tx && y === ty
+            })
+            if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
+          }
+        }
+
+        if (adjacentTargets.length > 0) {
+          const pathToEnemy = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
+
+          if (pathToEnemy && pathToEnemy.path.length > 0) {
+            // Calculate final position after following path
+            let fx = player.x
+            let fy = player.y
+            for (const step of pathToEnemy.path) {
+              if (step === "LEFT") fx -= 1
+              if (step === "RIGHT") fx += 1
+              if (step === "UP") fy -= 1
+              if (step === "DOWN") fy += 1
+            }
+            const finalPos = { x: fx, y: fy }
+
+            // Check if we can bomb enemy from final position
+            const willHit = willBombHitEnemy(
+              finalPos.x,
+              finalPos.y,
+              enemy.x,
+              enemy.y,
+              map,
+              myBomber.explosionRange,
+            )
+
+            if (willHit) {
+              // Check if bombing would destroy items
+              const itemCheck = checkBombWouldDestroyItems(
+                finalPos.x,
+                finalPos.y,
+                map,
+                myBomber.explosionRange,
+              )
+
+              if (!itemCheck.willDestroyItems) {
+                // Validate escape after bombing
+                const futureBombs = [
+                  ...bombs,
+                  createFutureBomb(finalPos.x, finalPos.y, myBomber.explosionRange, myBomber.uid),
+                ]
+                const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+
+                if (futureSafeTiles.length > 0) {
+                  const escapePath = findBestPath(
+                    map,
+                    finalPos,
+                    futureSafeTiles,
+                    futureBombs,
+                    bombers,
+                    myUid,
+                    true,
+                  )
+
+                  if (escapePath && escapePath.path.length > 0) {
+                    console.log(
+                      `   ✅ PRIORITY PURSUIT: Path to enemy found (${pathToEnemy.path.length} steps)`,
+                    )
+                    console.log(`      Can bomb and escape after reaching enemy`)
+                    console.log(`🎯 DECISION: PURSUE ENEMY (Priority)`)
+                    console.log("=".repeat(90) + "\n")
+                    trackDecision(player, pathToEnemy.path[0])
+                    return {
+                      action: pathToEnemy.path[0],
+                      fullPath: pathToEnemy.path,
+                      isPursuit: true,
+                    }
+                  }
+                }
+              } else {
+                console.log(`   ⚠️ Would destroy items, skipping this enemy`)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    console.log(`   ℹ️ No priority pursuit opportunities found`)
   }
 
   // PHASE 2: Dynamic Item Prioritization

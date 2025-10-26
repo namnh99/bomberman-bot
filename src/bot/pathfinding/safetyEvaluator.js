@@ -16,9 +16,19 @@ import { inBounds, toGridCoords } from "../../utils/gridUtils.js"
  * @param {Array} allBombers - Array of all bombers
  * @param {Object} map - Game map
  * @param {number} currentSpeed - Current movement speed (pixels per tick)
+ * @param {boolean} emergencyMode - If true, use minimal buffers for desperate escapes
  * @returns {boolean} - True if tile will be safe when we reach it
  */
-export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, currentSpeed = 1) {
+export function isTileSafeByTime(
+  x,
+  y,
+  stepsToReach,
+  bombs,
+  allBombers,
+  map,
+  currentSpeed = 1,
+  emergencyMode = false,
+) {
   const now = Date.now()
 
   // Calculate time to reach this tile with accurate speed calculation
@@ -33,9 +43,12 @@ export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, cur
   // Total time with safety margin for network delays and alignment
   const timeToReach = stepsToReach * timePerGridCell + alignmentOverhead
 
-  // Additional safety buffer based on speed - slower movement needs more buffer
+  // EMERGENCY MODE: Use minimal buffers for desperate situations
+  // NORMAL MODE: Balanced buffers for safety
   const speedSafetyFactor = Math.max(1, 2 / currentSpeed) // Slower = higher factor
-  const networkBuffer = 300 * speedSafetyFactor // 300-600ms network buffer
+  const networkBuffer = emergencyMode
+    ? 200 * speedSafetyFactor // EMERGENCY: 200-400ms (minimal!)
+    : 300 * speedSafetyFactor // NORMAL: 300-600ms (reduced from 400ms)
 
   // Debug logging for timing calculations (only log first few checks)
   if (stepsToReach <= 3 && bombs.length > 0) {
@@ -60,18 +73,21 @@ export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, cur
     const bombCreatedAt = bomb.createdAt || now
     const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
 
-    // CRITICAL: Check if bomb timestamps are server time or client time
-    // If createdAt is way in the past/future, we have a time sync issue
-    const timeDiff = now - bombCreatedAt
-    if (Math.abs(timeDiff) > bombLifeTime * 2) {
-      console.warn(
-        `⚠️  TIME SYNC ISSUE! Bomb created ${timeDiff}ms ago (expected < ${bombLifeTime * 2}ms)`,
-      )
-      console.warn(`   This suggests server time ≠ client time!`)
-      console.warn(`   Bomb: createdAt=${bombCreatedAt}, now=${now}, diff=${timeDiff}`)
+    // CRITICAL FIX: Handle server/client time difference
+    // If createdAt is in the future (server ahead), clamp elapsed time to 0
+    const elapsedTime = Math.max(0, now - bombCreatedAt)
+
+    // If elapsed time > lifeTime, bomb should have exploded (skip it)
+    if (elapsedTime >= bombLifeTime) {
+      if (stepsToReach <= 3) {
+        console.log(
+          `         💣 Bomb [${gridBombX},${gridBombY}]: SKIPPED (already exploded: elapsed ${elapsedTime}ms >= life ${bombLifeTime}ms)`,
+        )
+      }
+      continue // Skip this bomb - it should be gone
     }
 
-    const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
+    const timeUntilExplosion = bombLifeTime - elapsedTime
 
     // DEBUG: Log timing calculations for first few tiles
     if (stepsToReach <= 3 && bombs.length > 0) {
@@ -96,8 +112,11 @@ export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, cur
     // Check if tile IS the bomb location
     if (x === gridBombX && y === gridBombY) {
       // Only allow crossing the bomb tile if we can pass BEFORE it explodes
-      // Need MUCH larger buffer when crossing bomb tile directly
-      const BOMB_TILE_BUFFER = 2000 + networkBuffer // 2.3-2.6s buffer (speed-dependent)
+      // EMERGENCY: Minimal buffer (800ms) - desperate situations
+      // NORMAL: Reduced buffer (1500ms) - allows crossing with reasonable safety
+      const BOMB_TILE_BUFFER = emergencyMode
+        ? 800 + networkBuffer // EMERGENCY: 1.0-1.2s (risky but may save life!)
+        : 1500 + networkBuffer // NORMAL: 1.8-2.1s (reduced from 2000ms)
       const canCrossSafely =
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - BOMB_TILE_BUFFER
 
@@ -134,9 +153,17 @@ export function isTileSafeByTime(x, y, stepsToReach, bombs, allBombers, map, cur
 
     // If tile is in blast zone, check timing
     if (isInBlastZone) {
+      // CRITICAL: When crossing blast zones, we need EXTRA time!
+      // Bot needs time to FULLY CROSS the tile, not just reach it!
+      // Add timePerGridCell as crossing buffer (bot is vulnerable while crossing)
+      const crossingTime = timePerGridCell // Time to fully cross this dangerous tile
+
       // Can only pass through if we reach BEFORE bomb explodes AND have buffer time
-      // Buffer scales with speed - slower movement needs more buffer
-      const SAFETY_BUFFER = 1500 + networkBuffer // 1.8-2.1s safety margin (speed-dependent)
+      // EMERGENCY: Minimal buffer (500ms) + crossing time - desperate escape
+      // NORMAL: Safe buffer (800ms) + crossing time - ensures bot exits blast zone before explosion
+      const SAFETY_BUFFER = emergencyMode
+        ? 500 + networkBuffer + crossingTime // EMERGENCY: ~1.4-1.6s (minimal but accounts for crossing!)
+        : 800 + networkBuffer + crossingTime // NORMAL: ~1.8-2.0s (safe crossing time)
       const canPassSafely =
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - SAFETY_BUFFER
 

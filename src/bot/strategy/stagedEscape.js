@@ -105,10 +105,25 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
         reason: `Stay at current position (completely safe), wait ${(fastestBomb.timeRemaining / 1000).toFixed(1)}s for fast bomb to explode`,
       }
     } else {
+      // CRITICAL: Validate we can escape from current position after waiting
+      const canEscapeLater = canEscapeAfterWaiting(myPos, remainingBombs, map, bombers, myUid)
+
+      if (canEscapeLater && waitSafetyMargin > 1500) {
+        // Can escape later AND have enough time - STAY here
+        console.log(`      🎯 Current position has escape routes - will STAY and wait!`)
+        return {
+          waitPosition: { x: myPos.x, y: myPos.y },
+          waitTime: fastestBomb.timeRemaining,
+          waitSafetyMargin,
+          isStayingInPlace: true,
+          reason: `Stay at current position (safe from fast bomb, can escape later), wait ${(fastestBomb.timeRemaining / 1000).toFixed(1)}s`,
+        }
+      }
+
       console.log(
-        `      ⚠️ Still in blast zone of remaining bombs - should move to completely safe position`,
+        `      ⚠️ Current position ${canEscapeLater ? "has escape routes but tight timing" : "has NO escape routes"} - should move to better position`,
       )
-      // Don't return here - continue to search for completely safe waiting position
+      // Don't return here - continue to search for better waiting position
     }
   }
 
@@ -195,8 +210,25 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
         // 1. Are NOT in blast zone of remaining bombs (can wait indefinitely)
         // 2. Are close (less travel time)
         // 3. Have timing safety from remaining bombs
+        // 4. CRITICAL: Have escape routes after waiting (prevent deadlocks)
 
         const isInRemainingBlastZones = unsafeFromAll.has(key)
+
+        // CRITICAL: Validate that this waiting position will have escape routes
+        // This prevents the bot from waiting in a position that becomes a deadlock
+        const canEscapeLater = canEscapeAfterWaiting(
+          { x: checkX, y: checkY },
+          remainingBombs,
+          map,
+          bombers,
+          myUid,
+        )
+
+        if (!canEscapeLater) {
+          // Skip this position - it's a deadlock trap
+          continue
+        }
+
         const score = calculateWaitPositionScore(
           distance,
           fastestBomb.timeRemaining - travelTime,
@@ -334,9 +366,11 @@ function calculateWaitPositionScore(
 
 /**
  * Validate that after waiting, we can still escape remaining bombs
+ * CRITICAL: This prevents deadlock situations where bot waits in a position
+ * that has no viable escape routes after the fast bomb explodes
  */
 export function canEscapeAfterWaiting(waitPosition, remainingBombs, map, bombers, myUid) {
-  // This will be called after fastest bomb explodes
+  // This will be called to validate if position will be escapable later
   // Check if from waitPosition, we have viable escape from remaining bombs
 
   const myBomber = bombers.find((b) => b.uid === myUid)
@@ -350,22 +384,59 @@ export function canEscapeAfterWaiting(waitPosition, remainingBombs, map, bombers
     return true // Already safe, no need to escape
   }
 
-  // TODO: Could add pathfinding check here
-  // For now, assume if we have any neighbor outside blast zones, we can escape
-
-  const neighbors = [
-    { x: waitPosition.x, y: waitPosition.y - 1 },
-    { x: waitPosition.x, y: waitPosition.y + 1 },
-    { x: waitPosition.x - 1, y: waitPosition.y },
-    { x: waitPosition.x + 1, y: waitPosition.y },
+  // CRITICAL: Check if we have at least ONE walkable neighbor that is:
+  // 1. Not a wall/chest
+  // 2. Either outside blast zones OR has timing-safe escape
+  const DIRS = [
+    [0, -1, "UP"],
+    [0, 1, "DOWN"],
+    [-1, 0, "LEFT"],
+    [1, 0, "RIGHT"],
   ]
 
-  for (const neighbor of neighbors) {
+  let safeExitCount = 0
+  for (const [dx, dy, dirName] of DIRS) {
+    const neighbor = { x: waitPosition.x + dx, y: waitPosition.y + dy }
+
+    // Check bounds
+    if (
+      neighbor.y < 0 ||
+      neighbor.y >= map.length ||
+      neighbor.x < 0 ||
+      neighbor.x >= map[0].length
+    ) {
+      continue
+    }
+
+    // Check walkable
+    const cell = map[neighbor.y][neighbor.x]
+    if (!WALKABLE.includes(cell)) {
+      continue
+    }
+
     const nKey = posKey(neighbor.x, neighbor.y)
+
+    // Check if this neighbor is safe or has timing margin
     if (!unsafeFromRemaining.has(nKey)) {
-      return true // Has safe neighbor
+      safeExitCount++
+    } else {
+      // Check if we have time to escape through this tile
+      // Assume 1 step to move from waiting position to this neighbor
+      const isSafeByTime = isTileSafeByTime(
+        neighbor.x,
+        neighbor.y,
+        1,
+        remainingBombs,
+        bombers,
+        map,
+        currentSpeed,
+      )
+      if (isSafeByTime) {
+        safeExitCount++
+      }
     }
   }
 
-  return false // Might be trapped after waiting
+  // Need at least one safe exit to avoid deadlock
+  return safeExitCount > 0
 }
