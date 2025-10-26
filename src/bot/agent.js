@@ -7,6 +7,7 @@ import {
   ITEM_PRIORITY_BIAS,
   OSCILLATION_THRESHOLD,
   BOMB_EXPLOSION_TIME,
+  STEP_DELAY,
 } from "../utils/constants.js"
 import { toGridCoords, posKey, isAdjacent, inBounds } from "../utils/gridUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
@@ -192,13 +193,11 @@ function handleTarget(result, state, myUid) {
   const myBomber = bombers && bombers.find((b) => b.uid === myUid)
   const player = toGridCoords(myBomber.x, myBomber.y)
 
-
   // If path is blocked by a chest, handle it
   if (result?.walls?.length > 0) {
     const targetWall = result.walls[0]
 
     if (isAdjacent(targetWall.x, targetWall.y, player.x, player.y)) {
-
       // Check bombing cooldown at this position
       if (!canBombAtPosition(player.x, player.y)) {
         return { action: "STAY" }
@@ -229,7 +228,6 @@ function handleTarget(result, state, myUid) {
         const escapePath = findShortestEscapePath(map, player, futureBombs, bombers, myBomber)
 
         if (escapePath && escapePath.path.length > 0) {
-
           if (myBomber.bombCount > 0) {
             // Record bomb placement to prevent spam
             recordBombPlacement(player.x, player.y)
@@ -260,7 +258,6 @@ function handleTarget(result, state, myUid) {
   // SPECIAL CASE: Already at target bombing position (path.length === 0, no walls blocking)
   // This happens when player is at an optimal chest bombing position OR at an item position
   if (result.path.length === 0 && result.walls.length === 0) {
-
     // PRIORITY: Check if we're standing on an item tile
     const currentTile = map[player.y] && map[player.y][player.x]
     const isOnItemTile = ITEMS.includes(currentTile)
@@ -293,7 +290,6 @@ function handleTarget(result, state, myUid) {
     const chestCount = countChestsDestroyedByBomb(player.x, player.y, map, myBomber.explosionRange)
 
     if (chestCount.count > 0 && myBomber.bombCount > 0) {
-
       // Check bombing cooldown
       if (!canBombAtPosition(player.x, player.y)) {
         return { action: "STAY" }
@@ -302,7 +298,6 @@ function handleTarget(result, state, myUid) {
       // Check if bombing would destroy items
       const itemCheck = checkBombWouldDestroyItems(player.x, player.y, map, myBomber.explosionRange)
       if (itemCheck.willDestroyItems) {
-
         // Don't stay here - return null to let main function continue to PHASE 6
         return null // Signal to continue to exploration phase
       } else {
@@ -350,7 +345,6 @@ function handleTarget(result, state, myUid) {
 
             if (!secondEscapePath) {
             } else {
-
               recordBombPlacement(player.x, player.y)
 
               return {
@@ -444,7 +438,6 @@ export function decideNextAction(state, myUid) {
     chestCount: allChests.length,
   })
 
-
   // PHASE 1: Safety Check
   const { isPlayerSafe, safeTiles } = checkSafety(map, player, bombs, bombers, myBomber)
 
@@ -474,7 +467,6 @@ export function decideNextAction(state, myUid) {
   })
 
   if (relevantBombs.length >= 2) {
-
     // Check if staying in place is the best option
     const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
 
@@ -577,8 +569,7 @@ export function decideNextAction(state, myUid) {
     }
 
     if (threateningBombs.length > 0) {
-      threateningBombs.forEach((t) => {
-      })
+      threateningBombs.forEach((t) => {})
 
       // Calculate if we have time to escape
       const fastestBomb = threateningBombs.sort(
@@ -682,13 +673,11 @@ export function decideNextAction(state, myUid) {
   // PHASE 1.7: Aggressive Enemy Pursuit (HIGH PRIORITY - before items/chests)
   // This phase runs BEFORE item/chest collection to prioritize combat
   if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
-
     for (const enemy of enemies) {
       const distance = Math.abs(enemy.x - player.x) + Math.abs(enemy.y - player.y)
 
       // ULTRA AGGRESSIVE: Pursue enemies within 12 tiles (was 8)
       if (distance <= 12) {
-
         // Find adjacent tiles to enemy
         const adjacentTargets = []
         for (const [adx, ady] of DIRS) {
@@ -772,7 +761,6 @@ export function decideNextAction(state, myUid) {
         }
       }
     }
-
   }
 
   // PHASE 2: Dynamic Item Prioritization
@@ -864,8 +852,7 @@ export function decideNextAction(state, myUid) {
   // Log dangerous items separately
   const dangerousItems = accessibleItems.filter((item) => item.isInBlastZone)
   if (dangerousItems.length > 0) {
-    dangerousItems.forEach((item) => {
-    })
+    dangerousItems.forEach((item) => {})
   }
 
   if (accessibleItems.length < items.length) {
@@ -931,12 +918,10 @@ export function decideNextAction(state, myUid) {
     // Check if adjacent to a chest
     const adjacentChest = chests.find((c) => isAdjacent(c.x, c.y, player.x, player.y))
     if (adjacentChest) {
-
       // Verify chest still exists in map (not already destroyed)
       const chestCell = map[adjacentChest.y] && map[adjacentChest.y][adjacentChest.x]
       if (chestCell !== "C") {
       } else {
-
         const bombAlreadyHere = bombs.some((bomb) => {
           const { x, y } = toGridCoords(bomb.x, bomb.y)
           return x === player.x && y === player.y
@@ -1068,7 +1053,6 @@ export function decideNextAction(state, myUid) {
                     // DEADLOCK: If escape destination has ≤ 1 exit, we'll be trapped!
                     if (walkableNeighbors.length <= 1) {
                     } else {
-
                       return {
                         action: "BOMB",
                         isEscape: true,
@@ -1138,7 +1122,6 @@ export function decideNextAction(state, myUid) {
         (t) => t.chestCount === adjacentTargetsWithScore[0].chestCount,
       )
 
-
       chestResult = findSafePath(map, player, bestTargets, bombs, bombers, myUid)
 
       // FALLBACK: If no safe path found, try findBestPath (relaxed timing)
@@ -1166,7 +1149,6 @@ export function decideNextAction(state, myUid) {
 
       if (chestResult) {
       } else {
-
         // DEBUG: Check if player is already at a good bombing position
         const playerAtGoodPosition = adjacentTargetsWithScore.find(
           (t) => t.x === player.x && t.y === player.y,
@@ -1222,7 +1204,6 @@ export function decideNextAction(state, myUid) {
     // This is self-defense, not aggressive pursuit
     for (const enemy of enemies) {
       if (isAdjacent(enemy.x, enemy.y, player.x, player.y)) {
-
         if (myBomber.bombCount > 0) {
           // Check bombing cooldown
           if (!canBombAtPosition(player.x, player.y)) {
@@ -1267,7 +1248,6 @@ export function decideNextAction(state, myUid) {
               )
 
               if (escapePath && escapePath.path.length > 0) {
-
                 // Record bomb placement
                 recordBombPlacement(player.x, player.y)
 
@@ -1390,7 +1370,6 @@ export function decideNextAction(state, myUid) {
     // Filter out current position from safe tiles
     const otherSafeTiles = safeTiles.filter((t) => t.x !== player.x || t.y !== player.y)
 
-
     if (otherSafeTiles.length > 0) {
       let explorePath = findSafePath(map, player, otherSafeTiles, bombs, bombers, myUid)
 
@@ -1431,7 +1410,6 @@ export function decideNextAction(state, myUid) {
           return { action: "STAY" }
         }
 
-
         // If backtrack guard changed the action, invalidate fullPath (can't follow anymore)
         const fullPathToUse = guarded === firstAction ? explorePath.path : null
         if (guarded !== firstAction) {
@@ -1467,14 +1445,12 @@ export function decideNextAction(state, myUid) {
           }
         }
       }
-
     }
   } else {
   }
 
   // PHASE 6.5: Break out of isolation by bombing nearby obstacles
   if (myBomber.bombCount > 0) {
-
     // Check if we can bomb to break walls/chests around us
     const nearbyObstacles = []
     for (const [dx, dy, dir] of DIRS) {
@@ -1488,7 +1464,6 @@ export function decideNextAction(state, myUid) {
         }
       }
     }
-
 
     if (nearbyObstacles.length > 0) {
       // Check how many obstacles a bomb would destroy
@@ -1509,7 +1484,6 @@ export function decideNextAction(state, myUid) {
           if (!WALKABLE.includes(cell)) break
         }
       }
-
 
       // Only bomb if we can destroy obstacles and escape safely
       if (obstaclesInRange.length > 0) {
