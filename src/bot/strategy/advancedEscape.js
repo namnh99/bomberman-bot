@@ -11,11 +11,23 @@ import { findBestPath } from "../pathfinding/index.js"
 export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber) {
   console.log(`   🔍 Advanced Escape Analysis (${bombs.length} bombs active)`)
 
-  // Filter to only relevant bombs (nearby bombs that affect the bot)
+  // Filter to only relevant bombs (timing-based, not distance)
+  const now = Date.now()
   const relevantBombs = bombs.filter((bomb) => {
     if (bomb.isExploded) return false
+
+    const bombCreatedAt = bomb.createdAt || now
+    const bombLifeTime = bomb.lifeTime || 5000
+    const elapsedTime = Math.max(0, now - bombCreatedAt)
+
+    if (elapsedTime >= bombLifeTime) return false
+
+    const timeUntilExplosion = bombLifeTime - elapsedTime
     const distance = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
-    return distance <= 8 // Only consider bombs within 8 tiles
+    const timeToReach = distance * 1360 // STEP_DELAY + 680ms
+
+    // Relevant if will explode while we could be affected, or very close
+    return timeUntilExplosion < timeToReach + 2000 || distance <= 3
   })
 
   if (relevantBombs.length === 0) {
@@ -27,7 +39,7 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
 
   // Get danger timeline
   const timeline = calculateDangerTimeline(bombs, allBombers, map)
-  const now = Date.now()
+  const nowTime = Date.now()
 
   // Find all safe tiles
   const safeTiles = findSafeTiles(map, bombs, allBombers, myBomber)
@@ -46,7 +58,7 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
     // Calculate if we can reach this tile in time
     const speed = myBomber.speed || 1
     const timeToReach = (distance * 40 * 100) / speed // milliseconds
-    const arrivalTime = now + timeToReach
+    const arrivalTime = nowTime + timeToReach
 
     let isSafe = true
     let urgency = 0

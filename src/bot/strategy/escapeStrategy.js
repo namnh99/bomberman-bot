@@ -21,11 +21,25 @@ const ESCAPE_REVERSAL_COOLDOWN_MS = 2000
 export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   console.log(`   🚨 UNSAFE at [${player.x}, ${player.y}]! Finding escape route...`)
 
-  // Filter to only relevant bombs (nearby bombs that affect the bot)
+  // Filter to only relevant bombs (timing-based, not distance)
+  const now = Date.now()
   const relevantBombs = bombs.filter((bomb) => {
     if (bomb.isExploded) return false
+
+    const bombCreatedAt = bomb.createdAt || now
+    const bombLifeTime = bomb.lifeTime || 5000
+    const elapsedTime = Math.max(0, now - bombCreatedAt)
+
+    if (elapsedTime >= bombLifeTime) return false
+
+    const timeUntilExplosion = bombLifeTime - elapsedTime
     const distance = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
-    return distance <= 8 // Only consider bombs within 8 tiles
+
+    // Time to walk this distance
+    const timeToReach = distance * 1360 // STEP_DELAY + 680ms
+
+    // Relevant if: (1) will explode while we could be affected, OR (2) very close
+    return timeUntilExplosion < timeToReach + 2000 || distance <= 3
   })
 
   // Check for bomb chains first

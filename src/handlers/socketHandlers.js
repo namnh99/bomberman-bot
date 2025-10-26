@@ -32,17 +32,67 @@ export function registerSocketHandlers(
     onSetupManualControl()
   })
 
-  // User state update handler
+  // Game start handler - wait for this before making any decisions
+  socket.on("start", (data) => {
+    console.log("🎮 GAME STARTED!")
+    console.log(`   Start time: ${data.start_at}`)
+
+    // Make initial decision when game starts
+    if (gameContext.currentState && !manualControlManager.isManualMode()) {
+      console.log("   🤖 Making initial decision...")
+      onMakeDecision()
+    }
+  })
+
+  // User state update handler - no longer triggers decision (wait for 'start' event)
   socket.on("user", (state) => {
     gameContext.currentState = state
-    // Only make decision if not in manual mode AND not currently escaping
-    if (
-      !manualControlManager.isManualMode() &&
-      !pathModeManager.isEscaping() &&
-      !gameContext.moveIntervalId &&
-      !gameContext.alignIntervalId
-    ) {
-      onMakeDecision()
+    // Don't make decisions on 'user' event anymore
+    // Wait for 'start' event or other triggers
+  })
+
+  // User death handler - remove killed player from state
+  socket.on("user_die_update", (data) => {
+    if (!gameContext.currentState) return
+
+    console.log("💀 PLAYER DIED!")
+    console.log(`   Killer: ${data.killer?.name} (${data.killer?.uid})`)
+    console.log(`   Killed: ${data.killed?.name} (${data.killed?.uid})`)
+    console.log(
+      `   Bomb: ID ${data.bomb?.id} at [${Math.floor(data.bomb?.x / GRID_SIZE)}, ${Math.floor(data.bomb?.y / GRID_SIZE)}]`,
+    )
+
+    // Remove the killed player from bombers list
+    if (data.killed?.uid && gameContext.currentState.bombers) {
+      gameContext.currentState.bombers = gameContext.currentState.bombers.filter(
+        (bomber) => bomber.uid !== data.killed.uid,
+      )
+      console.log(`   ✅ Removed ${data.killed.name} from game state`)
+    }
+
+    // Update all bombers with the new list from event
+    if (data.bombers && Array.isArray(data.bombers)) {
+      gameContext.currentState.bombers = data.bombers
+      console.log(`   ✅ Updated bombers list (${data.bombers.length} remaining)`)
+    }
+
+    // Check if WE died
+    if (data.killed?.uid === gameContext.myUid) {
+      console.log("   ☠️  WE DIED! Game over for us.")
+      gameContext.forceClearIntervals()
+      pathModeManager.abortEscape("We died")
+      pathModeManager.abortFollow("We died")
+    } else {
+      // Enemy died - re-evaluate strategy if not in manual mode
+      if (
+        !manualControlManager.isManualMode() &&
+        !pathModeManager.isEscaping() &&
+        !gameContext.moveIntervalId &&
+        !gameContext.alignIntervalId
+      ) {
+        console.log("   🔄 Enemy eliminated, re-evaluating strategy...")
+        onMakeDecision()
+      }
     }
   })
 
@@ -157,8 +207,6 @@ export function registerSocketHandlers(
     gameContext.currentState.chests = data.chests
     gameContext.currentState.items = data.items
   })
-
-  socket.on()
 }
 
 /**

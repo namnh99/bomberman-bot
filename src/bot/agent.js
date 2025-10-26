@@ -545,14 +545,27 @@ export function decideNextAction(state, myUid) {
 
   // CRITICAL: Check staged escape EVEN WHEN SAFE for multi-bomb scenarios
   // Bot might be safe NOW but moving could put it in danger
-  // Only consider bombs that are actually affecting the bot (nearby or in blast range)
+  // Only consider bombs that could REALISTICALLY affect the bot (timing-based, not distance)
   const relevantBombs = bombs.filter((bomb) => {
     if (bomb.isExploded) return false
+
+    const now = Date.now()
+    const bombCreatedAt = bomb.createdAt || now
+    const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
+    const elapsedTime = Math.max(0, now - bombCreatedAt)
+
+    if (elapsedTime >= bombLifeTime) return false // Already exploded
+
+    const timeUntilExplosion = bombLifeTime - elapsedTime
     const { x: bx, y: by } = bomb
     const distance = Math.abs(bx - player.x) + Math.abs(by - player.y)
-    // Consider bombs within reasonable distance (e.g., 8 tiles)
-    // This covers bombs that could affect pathfinding or safety
-    return distance <= 8
+
+    // Calculate time needed to walk this distance
+    const timeToReachBomb = distance * (STEP_DELAY + 680) // ~1360ms per tile
+
+    // Only relevant if: (1) bomb will explode while we could still be affected, OR
+    // (2) bomb is very close (within 3 tiles) regardless of timing
+    return timeUntilExplosion < timeToReachBomb + 2000 || distance <= 3
   })
 
   if (relevantBombs.length >= 2) {
@@ -627,6 +640,88 @@ export function decideNextAction(state, myUid) {
     console.log("=".repeat(90) + "\n")
     trackDecision(player, "STAY")
     return { action: "STAY" }
+  }
+
+  // PHASE 1.4: Critical Bomb Proximity Check
+  // ABORT all non-escape actions if we're INSIDE a blast zone that will explode soon
+  // This is DIFFERENT from distance check - we check if CURRENT POSITION is in danger
+  const now = Date.now()
+  const CRITICAL_TIME_THRESHOLD = 3000 // 3 seconds
+
+  // Check if current position is in an ACTIVE blast zone that will explode soon
+  const currentUnsafeTiles = findUnsafeTiles(map, bombs, bombers)
+  const currentPositionKey = posKey(player.x, player.y)
+  const isInBlastZone = currentUnsafeTiles.has(currentPositionKey)
+
+  if (isInBlastZone && isPlayerSafe) {
+    // We're in a blast zone but marked as "safe" - check timing more carefully
+    console.log(`\n⚠️ WARNING: Current position [${player.x}, ${player.y}] is in blast zone!`)
+
+    // Find which bombs threaten us
+    const threateningBombs = []
+    for (const bomb of bombs) {
+      if (bomb.isExploded) continue
+
+      const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
+      const owner = bombers.find((b) => b.uid === bomb.uid)
+      const range = owner ? owner.explosionRange : 2
+
+      // Check if we're in this bomb's blast range
+      const inRange =
+        (bombX === player.x && Math.abs(bombY - player.y) <= range) ||
+        (bombY === player.y && Math.abs(bombX - player.x) <= range)
+
+      if (inRange) {
+        const bombCreatedAt = bomb.createdAt || now
+        const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
+        const elapsedTime = Math.max(0, now - bombCreatedAt)
+
+        if (elapsedTime < bombLifeTime) {
+          const timeUntilExplosion = bombLifeTime - elapsedTime
+
+          if (timeUntilExplosion <= CRITICAL_TIME_THRESHOLD) {
+            threateningBombs.push({
+              bomb,
+              bombX,
+              bombY,
+              timeUntilExplosion,
+              distance: Math.abs(bombX - player.x) + Math.abs(bombY - player.y),
+            })
+          }
+        }
+      }
+    }
+
+    if (threateningBombs.length > 0) {
+      console.log(`   💣 ${threateningBombs.length} bomb(s) threatening current position:`)
+      threateningBombs.forEach((t) => {
+        console.log(
+          `      Bomb at [${t.bombX}, ${t.bombY}] explodes in ${t.timeUntilExplosion.toFixed(0)}ms (${t.distance} tiles away)`,
+        )
+      })
+
+      // Calculate if we have time to escape
+      const fastestBomb = threateningBombs.sort(
+        (a, b) => a.timeUntilExplosion - b.timeUntilExplosion,
+      )[0]
+      const timeToEscape = STEP_DELAY + 680 // ~1 step to leave blast zone
+
+      if (fastestBomb.timeUntilExplosion < timeToEscape) {
+        console.log(
+          `   � NOT ENOUGH TIME TO ESCAPE! (need ${timeToEscape}ms, have ${fastestBomb.timeUntilExplosion.toFixed(0)}ms)`,
+        )
+        console.log(`   🛡️ ABORTING all offensive actions - SAFETY FIRST!`)
+        console.log("🎯 DECISION: STAY (accepting fate)")
+        console.log("=".repeat(90) + "\n")
+        trackDecision(player, "STAY")
+        return { action: "STAY" }
+      } else {
+        console.log(
+          `   ⏰ Have time to escape (need ${timeToEscape}ms, have ${fastestBomb.timeUntilExplosion.toFixed(0)}ms)`,
+        )
+        console.log(`   ✅ Continuing to find escape/action...`)
+      }
+    }
   }
 
   // PHASE 1.5: Enemy Trap Detection (if aggressive)
@@ -852,21 +947,50 @@ export function decideNextAction(state, myUid) {
 
   // CRITICAL: Classify items by danger level instead of filtering completely
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+  const nowTime = Date.now()
+
   const itemsWithDanger = items.map((item) => {
     const itemKey = posKey(item.x, item.y)
     const isInBlastZone = unsafeTiles.has(itemKey)
 
-    // If item is in blast zone, calculate time until danger
+    // Calculate time needed to REACH this item from current position
+    const distanceToItem = Math.abs(item.x - player.x) + Math.abs(item.y - player.y)
+    const timeToReachItem = distanceToItem * (STEP_DELAY + 680) // ~1360ms per tile
+
+    // If item is in blast zone, calculate if we have time to grab it
     let timeUntilDanger = Infinity
+    let canReachSafely = true
+
     if (isInBlastZone) {
       for (const bomb of bombs) {
+        if (bomb.isExploded) continue
+
         const bombX = Math.floor(bomb.x / GRID_SIZE)
         const bombY = Math.floor(bomb.y / GRID_SIZE)
-        const distance = Math.abs(item.x - bombX) + Math.abs(item.y - bombY)
+        const owner = bombers.find((b) => b.uid === bomb.uid)
+        const range = owner ? owner.explosionRange : 2
 
-        if (distance <= bomb.explosionRange) {
-          const bombTimeRemaining = bomb.lifeTime - (Date.now() - bomb.createdAt)
-          timeUntilDanger = Math.min(timeUntilDanger, bombTimeRemaining)
+        // Check if bomb affects this item
+        const inRange =
+          (bombX === item.x && Math.abs(bombY - item.y) <= range) ||
+          (bombY === item.y && Math.abs(bombX - item.x) <= range)
+
+        if (inRange) {
+          const bombCreatedAt = bomb.createdAt || nowTime
+          const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
+          const elapsedTime = Math.max(0, nowTime - bombCreatedAt)
+
+          if (elapsedTime < bombLifeTime) {
+            const bombTimeRemaining = bombLifeTime - elapsedTime
+            timeUntilDanger = Math.min(timeUntilDanger, bombTimeRemaining)
+
+            // Check if we can reach item BEFORE bomb explodes
+            // Need extra time to grab and escape (add 1 tile safety margin)
+            const safetyBuffer = (STEP_DELAY + 680) * 2 // 2 tiles worth of time
+            if (timeToReachItem + safetyBuffer > bombTimeRemaining) {
+              canReachSafely = false
+            }
+          }
         }
       }
     }
@@ -875,6 +999,9 @@ export function decideNextAction(state, myUid) {
       ...item,
       isInBlastZone,
       timeUntilDanger,
+      canReachSafely,
+      distanceToItem,
+      timeToReachItem,
     }
   })
 
@@ -898,7 +1025,15 @@ export function decideNextAction(state, myUid) {
       return false
     }
 
-    // Keep item for consideration (will check timing during pathfinding)
+    // TIMING-BASED SAFETY: Filter items that can't be reached safely
+    if (item.isInBlastZone && !item.canReachSafely) {
+      console.log(
+        `   ⏱️ Filtering out unreachable item: ${item.type} at [${item.x},${item.y}] (${item.timeToReachItem.toFixed(0)}ms to reach, ${item.timeUntilDanger.toFixed(0)}ms until explosion)`,
+      )
+      return false
+    }
+
+    // Keep item for consideration
     return true
   })
 
@@ -920,15 +1055,18 @@ export function decideNextAction(state, myUid) {
   }
 
   // Apply dynamic prioritization to accessible items
-  // BOOST priority for items in blast zones (risky = valuable if we can grab in time)
+  // BOOST priority for items in blast zones that we CAN reach safely (high risk, high reward)
   const prioritizedItems = accessibleItems
     .map((item) => {
       const priorityData = dynamicItemPriority(item, myBomber, enemies, player, gamePhase)
 
-      // CRITICAL: If item is in blast zone but has enough time, BOOST priority
-      if (item.isInBlastZone && item.timeUntilDanger > 2000) {
-        priorityData.finalValue *= 1.5 // 50% bonus for risky items
-        priorityData.riskBonus = true
+      // TIMING-BASED RISK BONUS: If item is in blast zone but we can grab it safely
+      if (item.isInBlastZone && item.canReachSafely) {
+        const timeMargin = item.timeUntilDanger - item.timeToReachItem
+        // More bonus for tighter timing (higher risk = higher reward)
+        const riskBonus = 1.5 + (1 - Math.min(timeMargin / 5000, 1)) * 0.5 // 1.5x to 2.0x bonus
+        priorityData.finalValue *= riskBonus
+        priorityData.riskBonus = riskBonus
       }
 
       return priorityData
@@ -938,7 +1076,9 @@ export function decideNextAction(state, myUid) {
   if (prioritizedItems.length > 0) {
     console.log(`   Top 3 prioritized items:`)
     prioritizedItems.slice(0, 3).forEach((pi, idx) => {
-      const riskTag = pi.item.isInBlastZone ? " 🔥 RISKY" : ""
+      const riskTag = pi.item.isInBlastZone
+        ? ` 🔥 RISKY (${pi.riskBonus ? `${pi.riskBonus.toFixed(2)}x bonus` : "filtered"})`
+        : ""
       console.log(
         `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)}${riskTag}`,
       )
@@ -1041,24 +1181,39 @@ export function decideNextAction(state, myUid) {
             )
             // Don't return here - continue to Phase 4 where item will be prioritized
           } else {
-            // CRITICAL SAFETY: Check if there are any bombs about to explode NEARBY
+            // CRITICAL SAFETY: Check if there are bombs that could explode while we're bombing
+            // Use TIMING calculation instead of distance
             const now = Date.now()
             const dangerousBombs = bombs.filter((b) => {
               if (b.isExploded) return false
               const bombCreatedAt = b.createdAt || now
               const bombLifeTime = b.lifeTime || BOMB_EXPLOSION_TIME
-              const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
+              const elapsedTime = Math.max(0, now - bombCreatedAt)
 
-              // Only dangerous if: (1) exploding soon AND (2) nearby
+              if (elapsedTime >= bombLifeTime) return false // Skip expired
+
+              const timeUntilExplosion = bombLifeTime - elapsedTime
+
+              // Only dangerous if exploding soon (< 3s)
               if (timeUntilExplosion <= 0 || timeUntilExplosion >= 3000) return false
 
-              // Check proximity - only bombs within ~6 tiles are relevant
-              // (max explosion range is usually 5, plus 1 safety margin)
+              // Check if bomb is in blast range or could affect our escape
               const { x: bombX, y: bombY } = toGridCoords(b.x, b.y)
-              const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
-              const DANGER_PROXIMITY = 6 // Only consider bombs within 6 tiles
+              const owner = bombers.find((bomber) => bomber.uid === b.uid)
+              const range = owner ? owner.explosionRange : 2
 
-              return distance <= DANGER_PROXIMITY
+              // Check if we're in blast zone OR bomb is close enough to block escape
+              const inBlastRange =
+                (bombX === player.x && Math.abs(bombY - player.y) <= range) ||
+                (bombY === player.y && Math.abs(bombX - player.x) <= range)
+
+              if (inBlastRange) return true
+
+              // Also check if bomb is close enough that we can't escape in time
+              const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+              const timeToEscapeBomb = distance * (STEP_DELAY + 680) // Time to walk away
+
+              return timeUntilExplosion < timeToEscapeBomb
             })
 
             if (dangerousBombs.length > 0) {
@@ -1108,19 +1263,61 @@ export function decideNextAction(state, myUid) {
                   )
 
                   if (escapePath && escapePath.path.length > 0) {
-                    console.log(`   ✅ Escape path found: ${escapePath.path.join(" → ")}`)
-                    console.log(
-                      `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
-                    )
-                    console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
-                    console.log("   🏃 Escape action:", escapePath.path[0])
-                    console.log("=".repeat(90) + "\n")
+                    // CRITICAL DEADLOCK CHECK: Verify escape destination isn't a corridor trap
+                    // Calculate where we'll end up after escape
+                    let escapeDestX = player.x
+                    let escapeDestY = player.y
 
-                    return {
-                      action: "BOMB",
-                      isEscape: true,
-                      escapeAction: escapePath.path[0],
-                      fullPath: escapePath.path,
+                    for (const move of escapePath.path) {
+                      if (move === "UP") escapeDestY--
+                      else if (move === "DOWN") escapeDestY++
+                      else if (move === "LEFT") escapeDestX--
+                      else if (move === "RIGHT") escapeDestX++
+                    }
+
+                    // Count walkable neighbors at escape destination
+                    const walkableNeighbors = []
+                    for (const [dx, dy, dir] of DIRS) {
+                      const nx = escapeDestX + dx
+                      const ny = escapeDestY + dy
+
+                      if (nx >= 0 && nx < map[0].length && ny >= 0 && ny < map.length) {
+                        const cell = map[ny][nx]
+                        const hasBomb = futureBombs.some((b) => {
+                          const { x, y } = toGridCoords(b.x, b.y)
+                          return x === nx && y === ny
+                        })
+
+                        if ((cell === null || cell === "S" || cell === "B") && !hasBomb) {
+                          walkableNeighbors.push(dir)
+                        }
+                      }
+                    }
+
+                    // DEADLOCK: If escape destination has ≤ 1 exit, we'll be trapped!
+                    if (walkableNeighbors.length <= 1) {
+                      console.log(
+                        `   ⚠️ DEADLOCK DETECTED! Escape to [${escapeDestX}, ${escapeDestY}] is a dead-end!`,
+                      )
+                      console.log(
+                        `      Only ${walkableNeighbors.length} walkable neighbor(s): ${walkableNeighbors.join(", ")}`,
+                      )
+                      console.log(`      Would create corridor trap → ABORTING bomb placement!`)
+                    } else {
+                      console.log(`   ✅ Escape path found: ${escapePath.path.join(" → ")}`)
+                      console.log(
+                        `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
+                      )
+                      console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
+                      console.log("   🏃 Escape action:", escapePath.path[0])
+                      console.log("=".repeat(90) + "\n")
+
+                      return {
+                        action: "BOMB",
+                        isEscape: true,
+                        escapeAction: escapePath.path[0],
+                        fullPath: escapePath.path,
+                      }
                     }
                   } else {
                     console.log(`   ❌ No escape path found after bombing`)

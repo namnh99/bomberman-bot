@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  bot-dev:
+    container_name: bomberman-bot-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env
+    # Mount source code for hot reload
+    volumes:
+      - ./src:/app/src:rw
+      - ./package.json:/app/package.json:ro
+      - /app/node_modules  # Prevent overwriting node_modules
+    # Enable debugging
+    ports:
+      - "9229:9229"  # Node.js debugger
+    restart: unless-stopped
+    # Resource limits (more generous for development)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Development environment variable
+    environment:
+      - NODE_ENV=development
