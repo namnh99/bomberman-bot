@@ -26,7 +26,6 @@ export function registerSocketHandlers(
 ) {
   // Connection handler
   socket.on("connect", () => {
-    console.log("✅ Connected:", socket.id)
     socket.emit("join", {})
     gameContext.myUid = socket.id
     onSetupManualControl()
@@ -34,12 +33,9 @@ export function registerSocketHandlers(
 
   // Game start handler - wait for this before making any decisions
   socket.on("start", (data) => {
-    console.log("🎮 GAME STARTED!")
-    console.log(`   Start time: ${data.start_at}`)
 
     // Make initial decision when game starts
     if (gameContext.currentState && !manualControlManager.isManualMode()) {
-      console.log("   🤖 Making initial decision...")
       onMakeDecision()
     }
   })
@@ -55,30 +51,21 @@ export function registerSocketHandlers(
   socket.on("user_die_update", (data) => {
     if (!gameContext.currentState) return
 
-    console.log("💀 PLAYER DIED!")
-    console.log(`   Killer: ${data.killer?.name} (${data.killer?.uid})`)
-    console.log(`   Killed: ${data.killed?.name} (${data.killed?.uid})`)
-    console.log(
-      `   Bomb: ID ${data.bomb?.id} at [${Math.floor(data.bomb?.x / GRID_SIZE)}, ${Math.floor(data.bomb?.y / GRID_SIZE)}]`,
-    )
 
     // Remove the killed player from bombers list
     if (data.killed?.uid && gameContext.currentState.bombers) {
       gameContext.currentState.bombers = gameContext.currentState.bombers.filter(
         (bomber) => bomber.uid !== data.killed.uid,
       )
-      console.log(`   ✅ Removed ${data.killed.name} from game state`)
     }
 
     // Update all bombers with the new list from event
     if (data.bombers && Array.isArray(data.bombers)) {
       gameContext.currentState.bombers = data.bombers
-      console.log(`   ✅ Updated bombers list (${data.bombers.length} remaining)`)
     }
 
     // Check if WE died
     if (data.killed?.uid === gameContext.myUid) {
-      console.log("   ☠️  WE DIED! Game over for us.")
       gameContext.forceClearIntervals()
       pathModeManager.abortEscape("We died")
       pathModeManager.abortFollow("We died")
@@ -90,7 +77,6 @@ export function registerSocketHandlers(
         !gameContext.moveIntervalId &&
         !gameContext.alignIntervalId
       ) {
-        console.log("   🔄 Enemy eliminated, re-evaluating strategy...")
         onMakeDecision()
       }
     }
@@ -124,18 +110,6 @@ export function registerSocketHandlers(
 
     // DEBUG: Log bomb object details to understand server data
     const now = Date.now()
-    console.log(`\n💣 NEW BOMB DEBUG:`)
-    console.log(`   ID: ${bomb.id}`)
-    console.log(
-      `   Position: [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}]`,
-    )
-    console.log(`   Owner UID: ${bomb.uid}`)
-    console.log(`   Created At (server): ${bomb.createdAt}`)
-    console.log(`   Life Time (server): ${bomb.lifeTime}`)
-    console.log(`   Client Time (now): ${now}`)
-    console.log(`   Time Diff: ${now - bomb.createdAt}ms`)
-    console.log(`   Will explode in: ${bomb.lifeTime - (now - bomb.createdAt)}ms`)
-    console.log(`   Full bomb object:`, JSON.stringify(bomb, null, 2))
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
@@ -221,7 +195,6 @@ function handleNewBombDuringPath(
 ) {
   // Check escape path first (highest priority)
   if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
-    console.log(`\n🚨 NEW BOMB during escape! Checking if escape path is still safe...`)
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     if (myBomber) {
@@ -249,30 +222,19 @@ function handleNewBombDuringPath(
       const destinationUnsafe = unsafeTiles.has(`${finalX},${finalY}`)
       const currentUnsafe = unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)
 
-      console.log(
-        `   Current: [${playerGridPos.x}, ${playerGridPos.y}] ${currentUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
-      )
-      console.log(
-        `   Destination: [${finalX}, ${finalY}] ${destinationUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
-      )
-      console.log(`   Path remaining: ${escapePath.join(" → ")}`)
 
       if (destinationUnsafe) {
-        console.log(`   ⚠️  Escape DESTINATION is unsafe!`)
-        console.log(`   🔄 ABORT ESCAPE - Finding new escape route!`)
         // Cancel current escape
         pathModeManager.abortEscape("Destination unsafe")
         gameContext.forceClearIntervals()
         // Immediately find new escape route
         onMakeDecision()
       } else {
-        console.log(`   ✅ Escape destination is safe, continuing escape...`)
       }
     }
   }
   // Check follow path (lower priority - abort if ANY tile becomes unsafe)
   else if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
-    console.log(`\n🚨 NEW BOMB during follow path! Aborting and re-evaluating...`)
     pathModeManager.abortFollow("New bomb detected")
     gameContext.forceClearIntervals()
     onMakeDecision()
@@ -286,10 +248,8 @@ function handleNewBombDuringPath(
     // Only re-evaluate if this is NOT our own bomb (we already have an escape plan)
     const isOurBomb = bomb.uid === gameContext.myUid
     if (!isOurBomb) {
-      console.log("🔔 Enemy bomb detected, re-evaluating...")
       onMakeDecision()
     } else {
-      console.log("💣 Our bomb placed, waiting for escape sequence to start...")
     }
   }
 }
@@ -316,14 +276,12 @@ function handleBombExplodeDuringPath(
 
       // Check if current position is now unsafe after bomb explosion
       if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 BOMB EXPLODED - Current position now UNSAFE! Aborting follow path!`)
         pathModeManager.abortFollow("Current position unsafe")
         gameContext.forceClearIntervals()
         onMakeDecision()
         return
       }
 
-      console.log("💥 Bomb exploded, but still safe - continuing follow path")
     }
   } else if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
     // CRITICAL: Even during escape, check if we're still safe
@@ -338,22 +296,18 @@ function handleBombExplodeDuringPath(
 
       // Check if current position became unsafe after bomb explosion
       if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 BOMB EXPLODED - Current position now UNSAFE during escape!`)
-        console.log(`   Re-evaluating escape immediately...`)
         pathModeManager.abortEscape("Current position unsafe")
         gameContext.forceClearIntervals()
         onMakeDecision()
         return
       }
 
-      console.log("💥 Bomb exploded during escape, but still safe - continuing")
     }
   } else if (
     !manualControlManager.isManualMode() &&
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    console.log("💥 Bomb exploded, re-evaluating...")
     onMakeDecision()
   }
 }
@@ -380,23 +334,19 @@ function handleChestDestroyedDuringPath(
 
       // Check if current position is now unsafe after chest destruction
       if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 CHEST DESTROYED - Current position now UNSAFE! Aborting follow path!`)
         pathModeManager.abortFollow("Current position unsafe")
         gameContext.forceClearIntervals()
         onMakeDecision()
         return
       }
 
-      console.log("🧱 Chest destroyed, but still safe - continuing follow path")
     }
   } else if (pathModeManager.isEscaping()) {
-    console.log("🏃 Escape in progress, ignoring chest destroyed event")
   } else if (
     !manualControlManager.isManualMode() &&
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    console.log("🧱 Chest destroyed, re-evaluating...")
     onMakeDecision()
   }
 }

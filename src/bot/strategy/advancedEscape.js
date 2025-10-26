@@ -9,7 +9,6 @@ import { findBestPath } from "../pathfinding/index.js"
  * Considers bomb explosion chains and timing windows
  */
 export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber) {
-  console.log(`   🔍 Advanced Escape Analysis (${bombs.length} bombs active)`)
 
   // Filter to only relevant bombs (timing-based, not distance)
   const now = Date.now()
@@ -31,11 +30,9 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
   })
 
   if (relevantBombs.length === 0) {
-    console.log(`   ℹ️ No nearby bombs affecting escape`)
     return null
   }
 
-  console.log(`   📊 ${relevantBombs.length} nearby bomb(s) out of ${bombs.length} total`)
 
   // Get danger timeline
   const timeline = calculateDangerTimeline(bombs, allBombers, map)
@@ -45,7 +42,6 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
   const safeTiles = findSafeTiles(map, bombs, allBombers, myBomber)
 
   if (safeTiles.length === 0) {
-    console.log(`   ❌ No safe tiles exist!`)
     return null
   }
 
@@ -86,14 +82,10 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
   const safest = analyzedTiles.filter((t) => t.isSafe).sort((a, b) => a.score - b.score)
 
   if (safest.length === 0) {
-    console.log(`   ⚠️ No tiles reachable before explosions!`)
     return null
   }
 
   const bestTile = safest[0]
-  console.log(
-    `   ✅ Best escape tile: [${bestTile.tile.x},${bestTile.tile.y}] - ${bestTile.distance} steps away`,
-  )
 
   // Use timed pathfinding for complex scenarios
   if (relevantBombs.length >= 3) {
@@ -107,7 +99,6 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
     )
 
     if (timedPath) {
-      console.log(`   🎯 Using timed path (danger score: ${timedPath.dangerScore})`)
       return {
         path: timedPath.path,
         target: bestTile.tile,
@@ -120,11 +111,9 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
   const pathResult = findBestPath(map, player, [bestTile.tile], bombs, allBombers)
 
   if (!pathResult || !pathResult.path || pathResult.path.length === 0) {
-    console.log(`   ⚠️ No path found to best safe tile`)
     return null
   }
 
-  console.log(`   ✅ Direct path to safety: ${pathResult.path.join(" → ")}`)
   return {
     path: pathResult.path,
     target: bestTile.tile,

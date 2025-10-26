@@ -42,15 +42,7 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
     return null
   }
 
-  console.log(`   🔍 Staged Escape Analysis:`)
-  console.log(
-    `      Fastest bomb: [${fastestBomb.gridX}, ${fastestBomb.gridY}] explodes in ${(fastestBomb.timeRemaining / 1000).toFixed(1)}s`,
-  )
-  console.log(`      Remaining bombs: ${remainingBombs.length}`)
   remainingBombs.forEach((b, i) => {
-    console.log(
-      `         Bomb ${i + 1}: [${b.gridX}, ${b.gridY}] explodes in ${(b.timeRemaining / 1000).toFixed(1)}s`,
-    )
   })
 
   // Find tiles that are:
@@ -62,11 +54,6 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
   const unsafeFromFastest = findUnsafeTiles(map, fastestBombOnly, bombers)
   const unsafeFromAll = findUnsafeTiles(map, bombs, bombers)
 
-  console.log(`      🔍 Staged Escape: Checking if current position is safe...`)
-  console.log(`         Current position: [${myPos.x}, ${myPos.y}]`)
-  console.log(
-    `         Fastest bomb: [${fastestBomb.gridX}, ${fastestBomb.gridY}] explodes in ${(fastestBomb.timeRemaining / 1000).toFixed(1)}s`,
-  )
 
   // PRIORITY 1: Check if CURRENT position is already safe from fastest bomb
   const currentPosKey = posKey(myPos.x, myPos.y)
@@ -87,16 +74,10 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
       }
     }
 
-    console.log(`      ✅ Current position is SAFE from fastest bomb!`)
-    console.log(
-      `         Wait safety margin from remaining bombs: ${waitSafetyMargin === Infinity ? "∞" : (waitSafetyMargin / 1000).toFixed(1) + "s"}`,
-    )
-    console.log(`         In remaining bombs blast zone: ${isInRemainingBlastZones ? "YES" : "NO"}`)
 
     // Only STAY if we're COMPLETELY safe (not in any blast zone)
     // If still in blast zone of remaining bombs, better to move to completely safe position
     if (!isInRemainingBlastZones) {
-      console.log(`      🎯 Current position is COMPLETELY SAFE - will STAY here!`)
       return {
         waitPosition: { x: myPos.x, y: myPos.y },
         waitTime: fastestBomb.timeRemaining,
@@ -110,7 +91,6 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
 
       if (canEscapeLater && waitSafetyMargin > 1500) {
         // Can escape later AND have enough time - STAY here
-        console.log(`      🎯 Current position has escape routes - will STAY and wait!`)
         return {
           waitPosition: { x: myPos.x, y: myPos.y },
           waitTime: fastestBomb.timeRemaining,
@@ -120,24 +100,15 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
         }
       }
 
-      console.log(
-        `      ⚠️ Current position ${canEscapeLater ? "has escape routes but tight timing" : "has NO escape routes"} - should move to better position`,
-      )
       // Don't return here - continue to search for better waiting position
     }
   }
 
-  console.log(
-    `      ⚠️ Current position NOT safe from fastest bomb - searching for safe waiting position...`,
-  )
 
   // PRIORITY 2: Search for nearby safe waiting positions
   const candidates = []
   const maxRadius = 6 // Increased from 4 to search wider area
 
-  console.log(`      🔍 Searching radius 1-${maxRadius}...`)
-  console.log(`         Fastest bomb blast zone tiles: ${unsafeFromFastest.size}`)
-  console.log(`         All bombs blast zone tiles: ${unsafeFromAll.size}`)
 
   let checkedCount = 0
   let walkableCount = 0
@@ -250,13 +221,8 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
     }
   }
 
-  console.log(
-    `      📊 Search stats: checked=${checkedCount}, walkable=${walkableCount}, safeFromFast=${safeFromFastCount}, reachable=${reachableCount}`,
-  )
-  console.log(`      📊 Found ${candidates.length} candidate waiting positions`)
 
   if (candidates.length === 0) {
-    console.log(`      ❌ No safe waiting positions found (all blocked or unreachable)`)
     return null
   }
 
@@ -269,15 +235,9 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
   let best
   if (completelySafeCandidates.length > 0) {
     best = completelySafeCandidates[0]
-    console.log(
-      `      ✅ Found ${completelySafeCandidates.length} completely safe positions (outside all blast zones)`,
-    )
   } else {
     // Fallback: Accept positions in remaining blast zones if we have enough time
     best = candidates[0]
-    console.log(
-      `      ⚠️ No completely safe positions found - using best available (still in blast zone)`,
-    )
   }
 
   // Only use waiting strategy if:
@@ -290,29 +250,10 @@ export function findSafeWaitingPosition(myPos, map, bombs, bombers, myUid) {
     (!best.isInRemainingBlastZones || best.waitSafetyMargin > 1500)
 
   if (!isViable) {
-    console.log(`      ❌ Best waiting position not viable enough`)
-    console.log(`         Position: [${best.x}, ${best.y}]`)
-    console.log(
-      `         Time until fast bomb: ${(best.timeUntilFastBombExplodes / 1000).toFixed(1)}s`,
-    )
-    console.log(
-      `         Wait safety margin: ${best.waitSafetyMargin === Infinity ? "∞" : (best.waitSafetyMargin / 1000).toFixed(1) + "s"}`,
-    )
     return null
   }
 
-  console.log(`      ✅ Safe waiting position found: [${best.x}, ${best.y}]`)
-  console.log(
-    `         Distance: ${best.distance} tiles (${(best.travelTime / 1000).toFixed(1)}s travel)`,
-  )
-  console.log(
-    `         Time until fast bomb explodes after arrival: ${(best.timeUntilFastBombExplodes / 1000).toFixed(1)}s`,
-  )
-  console.log(
-    `         In remaining blast zones: ${best.isInRemainingBlastZones ? "YES (must escape after)" : "NO (completely safe)"}`,
-  )
   if (best.waitSafetyMargin !== Infinity) {
-    console.log(`         Can wait safely for: ${(best.waitSafetyMargin / 1000).toFixed(1)}s`)
   }
 
   return {

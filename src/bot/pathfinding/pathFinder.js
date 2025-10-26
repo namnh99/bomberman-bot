@@ -95,15 +95,11 @@ export function findBestPath(
           if (!isSafeByTiming) {
             // Timing unsafe - absolutely avoid
             if (nextStepCount <= 3) {
-              console.log(`      ⚠️  Avoiding bomb zone at [${nx}, ${ny}] - timing unsafe`)
             }
             continue
           }
           // If safe by timing, allow passage (RISKY!)
           if (nextStepCount <= 3) {
-            console.log(
-              `      ⚠️  RISKY: Crossing bomb zone at [${nx}, ${ny}] - timing calculated as safe`,
-            )
           }
         } else {
           // Default: NEVER cross bomb zones (SAFE STRATEGY)
@@ -148,9 +144,6 @@ export function findSafePath(map, start, targets, bombs, allBombers, myUid) {
   const safePath = findBestPath(map, start, targets, bombs, allBombers, myUid, false, false)
 
   if (safePath) {
-    console.log(
-      `   ✅ Safe path found: ${safePath.path.join(" → ")} (${safePath.path.length} steps)`,
-    )
     return safePath
   }
 
@@ -158,9 +151,6 @@ export function findSafePath(map, start, targets, bombs, allBombers, myUid) {
   const riskyPath = findBestPath(map, start, targets, bombs, allBombers, myUid, false, true)
 
   if (riskyPath) {
-    console.log(
-      `   ⚠️  RISKY path found: ${riskyPath.path.join(" → ")} (${riskyPath.path.length} steps) - crosses bomb zones!`,
-    )
     return riskyPath
   }
 
@@ -253,9 +243,6 @@ export function findShortestEscapePath(
 
         if (isOutsideAllBlastZones) {
           // Tile is outside all blast zones - bot can stay here safely!
-          console.log(
-            `   ✅ Escape tile [${x}, ${y}] is OUTSIDE all blast zones - safe to stay (no exit check needed)`,
-          )
         } else {
           // Tile is in blast zone - MUST verify it has timing-safe exits
           // CRITICAL: Verify this escape destination has at least ONE walkable exit
@@ -313,10 +300,6 @@ export function findShortestEscapePath(
           }
 
           if (!hasValidExit) {
-            console.log(
-              `   ⚠️ Escape tile [${x}, ${y}] is TRAPPED (no timing-safe exits available) - skipping`,
-            )
-            console.log(`      Exit check: ${exitDetails.join(", ")}`)
             continue // Don't use this as escape destination
           }
         }
@@ -326,13 +309,6 @@ export function findShortestEscapePath(
         const alignmentOverhead = timePerGridCell * 0.5
         const totalTime = stepCount * timePerGridCell + alignmentOverhead
 
-        console.log(
-          `   🕐 Found ${strictMode ? "STRICT" : "time-safe"} escape to [${x}, ${y}] in ${stepCount} steps`,
-        )
-        console.log(
-          `      ⏱️  Total escape time: ${stepCount} × ${timePerGridCell.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalTime.toFixed(0)}ms @ speed ${currentSpeed}`,
-        )
-        console.log(`      📍 Path: ${path.join(" → ")}`)
 
         return { path, target: { x, y }, distance: path.length }
       }
@@ -350,14 +326,12 @@ export function findShortestEscapePath(
 
       if (!inBounds(nx, ny, map)) {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: OUT_OF_BOUNDS`)
         }
         continue
       }
 
       if (visited.has(key)) {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: ALREADY_VISITED`)
         }
         continue
       }
@@ -366,7 +340,6 @@ export function findShortestEscapePath(
       const bombAtNextTile = bombTiles.get(key)
       if (bombAtNextTile && !bombAtNextTile.walkable) {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: HAS_BOMB`)
         }
         continue
       }
@@ -374,7 +347,6 @@ export function findShortestEscapePath(
       // In strict mode, NEVER cross bomb zones during escape
       if (strictMode && unsafeTiles.has(key)) {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: IN_BLAST_ZONE (strict mode)`)
         }
         continue
       }
@@ -384,21 +356,15 @@ export function findShortestEscapePath(
       // Only walk through empty spaces and items
       if (WALKABLE.includes(cell)) {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: ✅ ADDED TO QUEUE (cell=${cell})`)
         }
         visited.add(key)
         queue.push([nx, ny, [...path, dir], stepCount + 1])
       } else {
         if (exploredCount <= 3) {
-          console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: NOT_WALKABLE (cell=${cell})`)
         }
       }
     }
   }
 
-  console.log(`   🔍 BFS exhausted after exploring ${exploredCount} tiles - NO ESCAPE FOUND`)
-  console.log(`      Real bombs: ${realBombs.length}/${bombs.length} total bombs`)
-  console.log(`      Unsafe tiles from real bombs: ${unsafeTilesFromRealBombs.size}`)
-  console.log(`      All unsafe tiles: ${unsafeTiles.size}`)
   return null
 }

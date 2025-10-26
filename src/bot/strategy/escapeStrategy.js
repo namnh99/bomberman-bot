@@ -19,7 +19,6 @@ const ESCAPE_REVERSAL_COOLDOWN_MS = 2000
  * Try to escape from danger using advanced multi-bomb analysis
  */
 export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
-  console.log(`   🚨 UNSAFE at [${player.x}, ${player.y}]! Finding escape route...`)
 
   // Filter to only relevant bombs (timing-based, not distance)
   const now = Date.now()
@@ -46,13 +45,9 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
   if (relevantBombs.length >= 3) {
     const chains = detectBombChains(bombs, bombers, map)
     if (chains.length > 0) {
-      console.log(`   ⚠️ Detected ${chains.length} bomb chain(s)!`)
       const advancedEscape = findAdvancedEscapePath(player, map, bombs, bombers, myBomber)
 
       if (advancedEscape && advancedEscape.path) {
-        console.log(`   ✅ Advanced chain-aware escape: ${advancedEscape.path.join(" → ")}`)
-        console.log(`🎯 DECISION: ESCAPE (chain-aware)`)
-        console.log("=".repeat(90) + "\n")
         return {
           action: advancedEscape.path[0],
           isEscape: true,
@@ -72,16 +67,9 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
     const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
 
     if (waitStrategy) {
-      console.log(`   💡 STAGED ESCAPE STRATEGY AVAILABLE:`)
-      console.log(`      ${waitStrategy.reason}`)
 
       // Check if we should STAY at current position
       if (waitStrategy.isStayingInPlace) {
-        console.log(
-          `      🛑 STAYING at current position [${player.x}, ${player.y}] for ${(waitStrategy.waitTime / 1000).toFixed(1)}s`,
-        )
-        console.log(`🎯 DECISION: ESCAPE (staged - stay and wait for fast bomb)`)
-        console.log("=".repeat(90) + "\n")
 
         return {
           action: "STAY",
@@ -93,9 +81,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
       }
 
       // Otherwise, move to the waiting position
-      console.log(
-        `      📍 Move to [${waitStrategy.waitPosition.x}, ${waitStrategy.waitPosition.y}] and wait ${(waitStrategy.waitTime / 1000).toFixed(1)}s`,
-      )
 
       // Path to waiting position
       const waitPath = findBestPath(
@@ -109,9 +94,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
       )
 
       if (waitPath && waitPath.path.length > 0) {
-        console.log(`      ✅ Path to waiting position: ${waitPath.path.join(" → ")}`)
-        console.log(`🎯 DECISION: ESCAPE (staged - move and wait for fast bomb)`)
-        console.log("=".repeat(90) + "\n")
 
         return {
           action: waitPath.path[0],
@@ -121,7 +103,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
           waitPosition: waitStrategy.waitPosition,
         }
       } else {
-        console.log(`      ❌ Cannot path to waiting position`)
       }
     }
   }
@@ -144,12 +125,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
       targetPos === lastEscapeFrom &&
       now - lastEscapeTime < ESCAPE_REVERSAL_COOLDOWN_MS
     ) {
-      console.log(
-        `   ⚠️ Detected immediate escape reversal attempt — suppressing to avoid ping-pong`,
-      )
-      console.log(
-        `   Last escape: ${lastEscapeFrom} -> ${lastEscapeTo}, attempting: ${currentPos} -> ${targetPos}`,
-      )
 
       // Try to find a DIFFERENT safe tile (not the reversal target)
       const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
@@ -158,10 +133,8 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
       )
 
       if (otherSafeTiles.length > 0) {
-        console.log(`   🔍 Trying ${otherSafeTiles.length} alternative safe tiles...`)
         const altPath = findBestPath(map, player, otherSafeTiles, bombs, bombers, myUid, true)
         if (altPath && altPath.path.length > 0) {
-          console.log(`   ✅ Found alternative escape: ${altPath.path.join(" → ")}`)
 
           // Calculate target position from first move
           const altTargetPos = posKey(
@@ -182,9 +155,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
           lastEscapeTo = altTargetPos
           lastEscapeTime = now
 
-          console.log("🎯 DECISION: ESCAPE (alternative to avoid reversal)")
-          console.log("   Action:", altPath.path[0])
-          console.log("=".repeat(90) + "\n")
 
           return {
             action: altPath.path[0],
@@ -195,7 +165,6 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
       }
 
       // If no alternative, try emergency escape
-      console.log(`   ⚠️ No alternative escape found - trying emergency escape`)
       return attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
     }
     // ===== END REVERSAL PROTECTION =====
@@ -205,16 +174,9 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
     const wouldTrap = wouldMoveTrapUs(player, firstMovePos, map, bombs, [])
 
     if (wouldTrap) {
-      console.log(`   ⚠️ Escape path would trap us! Trying alternative...`)
       return attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
     }
 
-    console.log(`   ✅ Shortest escape path found: ${escapeResult.path.join(" → ")}`)
-    console.log(`   Target safe tile: [${escapeResult.target.x}, ${escapeResult.target.y}]`)
-    console.log(`   Distance: ${escapeResult.distance} steps`)
-    console.log("🎯 DECISION: ESCAPE (shortest path to safety)")
-    console.log("   Action:", escapeResult.path[0])
-    console.log("=".repeat(90) + "\n")
 
     // Record this escape to detect future reversals
     lastEscapeFrom = currentPos
@@ -230,54 +192,35 @@ export function attemptEscape(map, player, bombs, bombers, myBomber, myUid) {
 
   // FALLBACK: If path-based escape fails in multi-bomb zone, try timing-based direction
   if (relevantBombs.length >= 2) {
-    console.log(`   🕐 Path-based escape failed - trying timing-optimized direction...`)
 
     // Check if bot is trapped by enemies
     const gridPos = toGridCoords(player.x, player.y)
     const trapInfo = detectTrapSituation(gridPos, map, bombs, bombers, myUid)
 
     if (trapInfo.isTrapped && trapInfo.severity >= 3) {
-      console.log(`   🚨 TRAP DETECTED: ${trapInfo.analysis}`)
-      console.log(
-        `      Escape routes: ${trapInfo.escapeRoutes} walkable, ${trapInfo.safeRoutes} safe`,
-      )
-      console.log(
-        `      Blocked by: ${trapInfo.blockedByBombs} bombs, ${trapInfo.blockedByWalls} walls`,
-      )
 
       // Try evasive action
       const evasiveAction = suggestEvasiveAction(trapInfo, gridPos, map, bombs, bombers, myUid)
 
       if (evasiveAction && !evasiveAction.isFatal) {
-        console.log(`   💨 EVASIVE ACTION: ${evasiveAction.action}`)
-        console.log(`      Reason: ${evasiveAction.reason}`)
-        console.log(`🎯 DECISION: ESCAPE (evasive maneuver)`)
-        console.log("=".repeat(90) + "\n")
         return {
           action: evasiveAction.action,
           isEscape: true,
           fullPath: [evasiveAction.action],
         }
       } else if (evasiveAction) {
-        console.log(`   💀 ${evasiveAction.reason}`)
-        console.log(`   ⚰️  Bot is in FATAL trap - death imminent`)
       }
     }
 
     const prioritizedDir = findPrioritizedEscapeDirection(map, gridPos, bombs, bombers, myUid)
 
     if (prioritizedDir) {
-      console.log(`   ✅ Using timing-optimized direction: ${prioritizedDir}`)
-      console.log(`🎯 DECISION: ESCAPE (timing-optimized fallback)`)
-      console.log("=".repeat(90) + "\n")
       return {
         action: prioritizedDir,
         isEscape: true,
         fullPath: [prioritizedDir],
       }
     } else {
-      console.log(`   ❌ Timing-optimized escape also failed (all directions have negative margin)`)
-      console.log(`   💀 Bot is in FATAL position - no viable escape possible`)
     }
   }
 
@@ -301,7 +244,6 @@ function getNextPosition(current, action) {
  * Try emergency moves when no clear escape path exists
  */
 export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
-  console.log("   ⚠️ No direct escape path, trying emergency moves...")
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
   const currentSpeed = myBomber.speed || 1
 
@@ -313,9 +255,6 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
     const wouldReverse =
       posKey(player.x, player.y) === lastEscapeTo && posKey(lastEscapeFrom) === lastEscapeFrom
     if (wouldReverse) {
-      console.log(
-        `   🔄 ANTI-PING-PONG: Avoiding reversal from [${lastEscapeTo}] back to [${lastEscapeFrom}]`,
-      )
     }
   }
 
@@ -373,12 +312,6 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
   if (nonReversalMoves.length > 0) {
     const best = nonReversalMoves[0]
-    console.log(
-      `   ✅ Time-safe emergency move: ${best.dir} to [${best.nx}, ${best.ny}] (${best.dist} tiles from nearest bomb)`,
-    )
-    console.log("🎯 DECISION: EMERGENCY ESCAPE (time-safe tile)")
-    console.log("   Action:", best.dir)
-    console.log("=".repeat(90) + "\n")
 
     // Track escape for anti-ping-pong (shift the history)
     lastEscapeFrom = lastEscapeTo // Previous destination becomes old position
@@ -411,12 +344,6 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
   if (currentlySafeMoves.length > 0) {
     const best = currentlySafeMoves[0]
-    console.log(
-      `   ⚠️ Currently safe emergency move: ${best.dir} to [${best.nx}, ${best.ny}] (${best.dist} tiles from bomb, but may explode!)`,
-    )
-    console.log("🎯 DECISION: EMERGENCY ESCAPE (currently safe)")
-    console.log("   Action:", best.dir)
-    console.log("=".repeat(90) + "\n")
 
     return { action: best.dir }
   }
@@ -452,12 +379,6 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
   if (nonReversalDesperateMoves.length > 0) {
     const best = nonReversalDesperateMoves[0]
-    console.log(
-      `   🚨 DESPERATE: Moving ${best.dir} to [${best.nx}, ${best.ny}] (${best.dist} tiles from bomb, STILL IN DANGER!)`,
-    )
-    console.log("🎯 DECISION: EMERGENCY ESCAPE (desperate)")
-    console.log("   Action:", best.dir)
-    console.log("=".repeat(90) + "\n")
 
     // Track escape for anti-ping-pong (shift the history)
     lastEscapeFrom = lastEscapeTo // Previous destination becomes old position
@@ -470,18 +391,6 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
   // If ALL moves are blocked by anti-ping-pong, we're truly stuck in a deadlock
   // In this case, STAYING is better than ping-ponging (wastes time, same death)
   if (desperateMoves.length > 0) {
-    console.log(
-      `   ⛔ DEADLOCK: Trapped in ${desperateMoves.length}-tile corridor, all moves cause ping-pong!`,
-    )
-    console.log(`      Current: [${player.x}, ${player.y}]`)
-    console.log(`      Last escape: [${lastEscapeFrom}] → [${lastEscapeTo}]`)
-    console.log(
-      `      Available moves would be: ${desperateMoves.map((m) => `${m.dir} to [${m.nx},${m.ny}]`).join(", ")}`,
-    )
-    console.log(`   🛑 STAYING PUT - accepting fate rather than wasting time ping-ponging`)
-    console.log("🎯 DECISION: EMERGENCY ESCAPE (deadlock - staying)")
-    console.log("   Action: null (STAY)")
-    console.log("=".repeat(90) + "\n")
 
     // Reset anti-ping-pong tracking to allow future escapes if bombs explode
     lastEscapeFrom = null
@@ -529,9 +438,6 @@ export function checkSafety(map, player, bombs, bombers, myBomber) {
         const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
 
         if (timeUntilExplosion > 0 && timeUntilExplosion <= URGENCY_THRESHOLD) {
-          console.log(
-            `   ⚠️ URGENT: Bomb at [${bombX},${bombY}] exploding in ${(timeUntilExplosion / 1000).toFixed(1)}s (${distance} tiles away${isInBlastZone ? ", IN BLAST ZONE" : ""})`,
-          )
           hasUrgentThreat = true
           break
         }
@@ -542,11 +448,8 @@ export function checkSafety(map, player, bombs, bombers, myBomber) {
   // Override safety status if urgent threat detected
   const finalSafetyStatus = isPlayerSafe && !hasUrgentThreat
 
-  console.log(`   Safety Status: ${finalSafetyStatus ? "✅ SAFE" : "🚨 DANGER"}`)
   if (hasUrgentThreat && isPlayerSafe) {
-    console.log(`   ⚠️ Overriding to DANGER due to urgent bomb threat nearby`)
   }
-  console.log(`   Safe Tiles Available: ${safeTiles.length}`)
 
   return { isPlayerSafe: finalSafetyStatus, safeTiles }
 }

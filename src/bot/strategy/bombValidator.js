@@ -95,9 +95,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   const ESCAPE_SAFETY_BUFFER = 1200 * speedSafetyFactor // 1.2-2.4s safety margin (speed-dependent)
   const availableTime = BOMB_EXPLOSION_TIME - ESCAPE_SAFETY_BUFFER
 
-  console.log(
-    `   ⏱️  Escape timing: ${stepsNeeded} steps × ${timePerStep.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalEscapeTime.toFixed(0)}ms | Available: ${availableTime.toFixed(0)}ms (buffer: ${ESCAPE_SAFETY_BUFFER.toFixed(0)}ms)`,
-  )
 
   if (totalEscapeTime >= availableTime) {
     return {

@@ -4,7 +4,6 @@ import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "../utils/constants.js"
  * Send a single move command to the server
  */
 export function sendMoveCommand(socket, direction) {
-  // console.log(`   📤 Sending move command: ${direction}`)
   socket.emit("move", { orient: direction })
 }
 
@@ -24,11 +23,9 @@ export function alignToGrid(direction, myBomber, socket, gameContext) {
     if (direction === "UP" || direction === "DOWN") {
       // Check horizontal alignment (X-axis)
       const xOffset = myBomber.x % GRID_SIZE
-      console.log(`   🔧 Checking alignment X-offset: ${xOffset}`)
 
       // If offset <= 5 (GRID_SIZE - BOT_SIZE), bot is within grid cell - already aligned
       if (xOffset <= GRID_SIZE - BOT_SIZE) {
-        console.log(`   ✅ Already aligned (offset ${xOffset} <= ${GRID_SIZE - BOT_SIZE})`)
         return resolve()
       }
 
@@ -44,11 +41,9 @@ export function alignToGrid(direction, myBomber, socket, gameContext) {
     } else if (direction === "LEFT" || direction === "RIGHT") {
       // Check vertical alignment (Y-axis)
       const yOffset = myBomber.y % GRID_SIZE
-      console.log(`   🔧 Checking alignment Y-offset: ${yOffset}`)
 
       // If offset <= 5 (GRID_SIZE - BOT_SIZE), bot is within grid cell - already aligned
       if (yOffset <= GRID_SIZE - BOT_SIZE) {
-        console.log(`   ✅ Already aligned (offset ${yOffset} <= ${GRID_SIZE - BOT_SIZE})`)
         return resolve()
       }
 
@@ -66,15 +61,11 @@ export function alignToGrid(direction, myBomber, socket, gameContext) {
     if (moveOver && alignDirection) {
       const alignSteps = Math.ceil(moveOver / myBomber.speed)
       let stepsLeft = alignSteps
-      console.log(
-        `🔧 Aligning ${alignDirection} (${moveOver.toFixed(1)}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${direction}`,
-      )
 
       // STUCK DETECTION for alignment
       const maxAlignTime = alignSteps * STEP_DELAY * 3 // Allow 3x expected time
       const alignTimeout = setTimeout(() => {
         if (gameContext.alignIntervalId) {
-          console.log(`⚠️  Alignment TIMEOUT! Clearing interval and continuing...`)
           clearInterval(gameContext.alignIntervalId)
           gameContext.alignIntervalId = null
           resolve()

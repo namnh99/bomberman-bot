@@ -15,7 +15,6 @@ export class PathModeManager {
   }
 
   startEscape(path) {
-    console.log(`🚨 Entering ESCAPE MODE - ${path.length} step sequence`)
     this.escapeMode = true
     this.escapePath = [...path]
   }
@@ -29,13 +28,11 @@ export class PathModeManager {
   }
 
   abortEscape(reason = "Path blocked") {
-    console.log(`   🚨 ABORTING ESCAPE - ${reason}!`)
     this.escapeMode = false
     this.escapePath = []
   }
 
   completeEscape() {
-    console.log(`✅ Escape sequence completed!`)
     this.escapeMode = false
     this.escapePath = []
   }
@@ -46,7 +43,6 @@ export class PathModeManager {
   }
 
   startFollow(path) {
-    console.log(`🚶 Entering FOLLOW MODE - ${path.length} step sequence`)
     this.followMode = true
     this.followPath = [...path]
   }
@@ -60,13 +56,11 @@ export class PathModeManager {
   }
 
   abortFollow(reason = "Path blocked") {
-    console.log(`   🚨 ABORTING FOLLOW PATH - ${reason}!`)
     this.followMode = false
     this.followPath = []
   }
 
   completeFollow() {
-    console.log(`✅ Follow path completed!`)
     this.followMode = false
     this.followPath = []
   }

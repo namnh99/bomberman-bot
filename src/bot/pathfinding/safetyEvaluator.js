@@ -52,9 +52,6 @@ export function isTileSafeByTime(
 
   // Debug logging for timing calculations (only log first few checks)
   if (stepsToReach <= 3 && bombs.length > 0) {
-    console.log(
-      `      🕐 Timing check [${x},${y}]: ${stepsToReach} steps @ speed ${currentSpeed} = ${timeToReach.toFixed(0)}ms (${timePerGridCell.toFixed(0)}ms/grid + ${alignmentOverhead.toFixed(0)}ms align)`,
-    )
   }
 
   const h = map.length
@@ -80,9 +77,6 @@ export function isTileSafeByTime(
     // If elapsed time > lifeTime, bomb should have exploded (skip it)
     if (elapsedTime >= bombLifeTime) {
       if (stepsToReach <= 3) {
-        console.log(
-          `         💣 Bomb [${gridBombX},${gridBombY}]: SKIPPED (already exploded: elapsed ${elapsedTime}ms >= life ${bombLifeTime}ms)`,
-        )
       }
       continue // Skip this bomb - it should be gone
     }
@@ -91,21 +85,9 @@ export function isTileSafeByTime(
 
     // DEBUG: Log timing calculations for first few tiles
     if (stepsToReach <= 3 && bombs.length > 0) {
-      console.log(
-        `         💣 Bomb [${gridBombX},${gridBombY}]: created=${bombCreatedAt}, life=${bombLifeTime}ms, now=${now}`,
-      )
-      console.log(
-        `            Time until explosion: ${bombLifeTime}ms - (${now} - ${bombCreatedAt}) = ${timeUntilExplosion.toFixed(0)}ms`,
-      )
 
       if (timeUntilExplosion < 0) {
-        console.log(
-          `            ⚠️  BOMB ALREADY EXPLODED! (${timeUntilExplosion.toFixed(0)}ms ago)`,
-        )
       } else if (timeUntilExplosion > bombLifeTime) {
-        console.log(
-          `            ⚠️  TIME CALCULATION ERROR! Explosion time > lifeTime (${timeUntilExplosion.toFixed(0)}ms > ${bombLifeTime}ms)`,
-        )
       }
     }
 
@@ -121,9 +103,6 @@ export function isTileSafeByTime(
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - BOMB_TILE_BUFFER
 
       if (stepsToReach <= 3 && bombs.length > 0) {
-        console.log(
-          `         💣 Bomb at [${gridBombX},${gridBombY}] explodes in ${timeUntilExplosion.toFixed(0)}ms | Crossing tile needs ${timeToReach.toFixed(0)}ms + ${BOMB_TILE_BUFFER.toFixed(0)}ms buffer → ${canCrossSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
-        )
       }
 
       if (canCrossSafely) {
@@ -168,9 +147,6 @@ export function isTileSafeByTime(
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - SAFETY_BUFFER
 
       if (stepsToReach <= 3 && bombs.length > 0) {
-        console.log(
-          `         💥 Tile in blast zone of [${gridBombX},${gridBombY}] | Need ${timeToReach.toFixed(0)}ms + ${SAFETY_BUFFER.toFixed(0)}ms buffer vs ${timeUntilExplosion.toFixed(0)}ms available → ${canPassSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
-        )
       }
 
       if (!canPassSafely) {

@@ -90,17 +90,14 @@ export function findMostThreateningEnemy(enemies, myBomber, myPos) {
  * Evaluate if we should fight or flee
  */
 export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
-  console.log(`\n🔍 shouldFightOrFlee() called - enemies: ${enemies.length}`)
 
   if (enemies.length === 0) {
-    console.log(`   ℹ️ No enemies → NEUTRAL`)
     return "neutral"
   }
 
   const mostThreatening = findMostThreateningEnemy(enemies, myBomber, myPos)
 
   if (!mostThreatening) {
-    console.log(`   ℹ️ No threatening enemy found → NEUTRAL`)
     return "neutral"
   }
 
@@ -112,29 +109,15 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
       return sum + (b.bombCount || 1) * (b.explosionRange || 1) * (b.speed || 1)
     }, 0) / Math.max(enemies.length, 1)
 
-  console.log(`   💪 Power Comparison:`)
-  console.log(
-    `      My Power: ${myPower.toFixed(1)} (bombs:${myBomber.bombCount} × range:${myBomber.explosionRange} × speed:${myBomber.speed})`,
-  )
-  console.log(`      Avg Enemy Power: ${avgEnemyPower.toFixed(1)}`)
-  console.log(`      Power Ratio: ${(myPower / avgEnemyPower).toFixed(2)}x`)
-  console.log(
-    `      Threat Level: ${mostThreatening.level.toUpperCase()} (${mostThreatening.threat.toFixed(2)})`,
-  )
 
   // CRITICAL: Check if we're in ENDGAME (few enemies, low resources)
   const isEndgame = enemies.length <= 3 && (resources.chestCount < 20 || resources.itemCount < 3)
 
   // ENDGAME: Ignore critical threats, fight aggressively!
   if (isEndgame && mostThreatening.level === "critical") {
-    console.log(`   🎯 ENDGAME + Critical threat → OVERRIDE! Fight anyway!`)
-    console.log(
-      `      (Endgame: ${enemies.length} enemies, resources: items=${resources.itemCount}, chests=${resources.chestCount})`,
-    )
     // Don't return "flee" - continue to endgame logic below
   } else if (mostThreatening.level === "critical") {
     // EARLY/MID GAME: Flee from critical threats
-    console.log(`   🚨 Critical threat detected (NOT endgame) → FLEE`)
     return "flee"
   }
 
@@ -143,60 +126,41 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
   if (enemies.length <= 3 && (resources.chestCount < 20 || resources.itemCount < 3)) {
     if (myPower >= avgEnemyPower * 0.5) {
       // Fight even if MUCH weaker - ultra aggressive endgame!
-      console.log(
-        `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (only need 50% power)`,
-      )
       return "fight"
     } else {
-      console.log(
-        `   ⚠️ ENDGAME but too weak: need ${(avgEnemyPower * 0.5).toFixed(1)} power, have ${myPower.toFixed(1)}`,
-      )
     }
   }
 
   // ULTRA AGGRESSIVE: Fight if we're stronger OR EQUAL
   // REDUCED to 1.0x - fight whenever not significantly weaker!
   if (myPower >= avgEnemyPower * 1.0 && (resources.itemCount > 5 || resources.chestCount > 3)) {
-    console.log(
-      `   ⚔️ Equal/stronger with resources (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 1.0) → FIGHT!`,
-    )
     return "fight"
   }
 
   // Fight if we're stronger and enemy is close
   if (myPower > avgEnemyPower && mostThreatening.distance < 5) {
-    console.log(
-      `   ⚔️ Stronger and enemy close (distance: ${mostThreatening.distance} < 5) → FIGHT!`,
-    )
     return "fight"
   }
 
   // VERY AGGRESSIVE: Fight if we have ≥60% power (was 75%)
   // This makes bot ULTRA willing to fight
   if (enemies.length >= 1 && myPower >= avgEnemyPower * 0.6) {
-    console.log(`   ⚔️ Decent power (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 0.6) → FIGHT!`)
     return "fight"
   }
 
   // Only flee if outnumbered (3+) AND MUCH weaker (<50% power)
   // VERY AGGRESSIVE - only flee when truly hopeless!
   if (enemies.length >= 3 && myPower < avgEnemyPower * 0.5) {
-    console.log(
-      `   🏃 Heavily outnumbered (${enemies.length} enemies) and MUCH weaker (${(myPower / avgEnemyPower).toFixed(2)}x < 0.5) → FLEE!`,
-    )
     return "flee"
   }
 
   // Default: FIGHT unless extremely dangerous
   // ULTRA AGGRESSIVE - prefer fighting over fleeing
   if (mostThreatening.threat > 0.8) {
-    console.log(`   🏃 EXTREME threat level (${mostThreatening.threat.toFixed(2)} > 0.8) → FLEE!`)
     return "flee"
   } else if (mostThreatening.threat < 0.5) {
-    console.log(`   ⚔️ Manageable threat (${mostThreatening.threat.toFixed(2)} < 0.5) → FIGHT!`)
     return "fight"
   }
 
-  console.log(`   ⚔️ Medium threat → DEFAULT FIGHT! (${mostThreatening.threat.toFixed(2)})`)
   return "fight" // Changed from "neutral" to "fight" - always aggressive!
 }
