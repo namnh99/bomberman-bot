@@ -12,10 +12,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.3",
     "prettier": "^3.6.2",
     "socket.io-client": "^4.8.1"
   },
-  "devDependencies": {
-    "dotenv": "^17.2.3"
-  }
+  "devDependencies": {}
 }
