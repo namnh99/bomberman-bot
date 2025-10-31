@@ -1,5 +1,5 @@
-import { DIRS, GRID_SIZE } from "../../utils/constants.js"
-import { toGridCoords, isWalkable, manhattanDistance, posKey } from "../../utils/gridUtils.js"
+import { DIRS } from "../../utils/constants.js"
+import { isWalkable, manhattanDistance, posKey } from "../../utils/gridUtils.js"
 
 /**
  * Predict enemy positions for next N ticks

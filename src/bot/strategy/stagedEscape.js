@@ -1,5 +1,5 @@
 import { GRID_SIZE, WALKABLE } from "../../utils/constants.js"
-import { toGridCoords, posKey, manhattanDistance } from "../../utils/gridUtils.js"
+import { posKey, manhattanDistance } from "../../utils/gridUtils.js"
 import { findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
 

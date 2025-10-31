@@ -1,4 +1,4 @@
-import { manhattanDistance, posKey, isWalkable } from "../../utils/gridUtils.js"
+import { manhattanDistance } from "../../utils/gridUtils.js"
 
 /**
  * Evaluate zone control and territorial dominance
@@ -115,8 +115,3 @@ function scoreZone(zone, myPos, enemies, items, chests, explosionRange) {
     isContested: enemiesInZone.length > 0,
   }
 }
-
-// Removed unused functions:
-// - findSafeRetreatPosition() - zone control retreat not implemented in agent.js
-// - findFallbackRetreat() - helper for findSafeRetreatPosition
-// - isInControlledTerritory() - zone control territory checking not implemented in agent.js

@@ -1,5 +1,5 @@
-import { GRID_SIZE, DIRS, WALKABLE } from "../../utils/constants.js"
-import { toGridCoords, posKey, isWalkable, isAdjacent } from "../../utils/gridUtils.js"
+import { DIRS } from "../../utils/constants.js"
+import { toGridCoords, posKey, isWalkable } from "../../utils/gridUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath, findShortestEscapePath } from "../pathfinding/pathFinder.js"
 import { wouldMoveTrapUs } from "../pathfinding/riskEvaluator.js"

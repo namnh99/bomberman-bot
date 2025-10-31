@@ -243,50 +243,50 @@ function handleTarget(result, state, myUid) {
         chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
       )
 
-      const now = Date.now()
-      const futureBombs = [
-        ...bombs,
-        createFutureBomb(player.x, player.y, myBomber.explosionRange, myBomber.uid),
-      ]
-      const futureSafeTiles = findSafeTiles(state.map, futureBombs, bombers, myBomber)
-      console.log(`   Future safe tiles: ${futureSafeTiles.length}`)
+      // CRITICAL SAFETY CHECK: Validate bomb safety BEFORE placing
+      const bombPos = { x: player.x, y: player.y }
+      const validation = validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid)
 
-      if (futureSafeTiles.length > 0) {
-        // Use findShortestEscapePath to ensure escape destination is not trapped
-        const escapePath = findShortestEscapePath(map, player, futureBombs, bombers, myBomber)
-
-        if (escapePath && escapePath.path.length > 0) {
-          console.log(`   ✅ Escape path: ${escapePath.path.join(" → ")}`)
+      if (!validation.canBomb) {
+        console.log(
+          `   ❌ BOMB VALIDATION FAILED: ${validation.reason} - REFUSING TO BOMB (suicide prevention)`,
+        )
+        if (validation.escapeTime && validation.availableTime) {
           console.log(
-            `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} blocking chest${chestCount.count > 1 ? "s" : ""})`,
+            `      Need ${validation.escapeTime.toFixed(0)}ms but only ${validation.availableTime.toFixed(0)}ms available`,
           )
-          console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
-          console.log("   🏃 Escape action:", escapePath.path[0])
-          console.log("=".repeat(60) + "\n")
-
-          if (myBomber.bombCount > 0) {
-            // Record bomb placement to prevent spam
-            recordBombPlacement(player.x, player.y)
-
-            return {
-              action: "BOMB",
-              escapeAction: escapePath.path[0],
-              isEscape: true,
-              fullPath: escapePath.path,
-            }
-          }
-        } else {
-          console.log(`   ❌ No escape path found`)
         }
+        // Continue to next phase instead of bombing
+        console.log("=".repeat(60) + "\n")
       } else {
-        console.log(`   ❌ No safe tiles after bombing`)
+        console.log(
+          `   ✅ BOMB VALIDATED: Safe to bomb with escape path: ${validation.escapePath.join(" → ")}`,
+        )
+        console.log(
+          `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} blocking chest${chestCount.count > 1 ? "s" : ""})`,
+        )
+        console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
+        console.log("   🏃 Escape action:", validation.escapeAction)
+        console.log("=".repeat(60) + "\n")
+
+        if (myBomber.bombCount > 0) {
+          // Record bomb placement to prevent spam
+          recordBombPlacement(player.x, player.y)
+
+          return {
+            action: "BOMB",
+            escapeAction: validation.escapeAction,
+            isEscape: true,
+            fullPath: validation.escapePath,
+          }
+        }
       }
     } else {
       console.log(`   Wall not adjacent, need to move closer first`)
     }
-    console.log("🎯 DECISION: STAY (Not safe to bomb blocking chest)")
-    console.log("=".repeat(60) + "\n")
-    return { action: "STAY" }
+    // If we didn't bomb, continue to other logic below
+  } else {
+    // No walls blocking path
   }
 
   // Move towards target

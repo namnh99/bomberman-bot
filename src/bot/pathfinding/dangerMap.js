@@ -1,4 +1,4 @@
-import { GRID_SIZE, DIRS, BLOCKABLE_EXPLOSION } from "../../utils/constants.js"
+import { DIRS, BLOCKABLE_EXPLOSION } from "../../utils/constants.js"
 import { inBounds, posKey, toGridCoords } from "../../utils/gridUtils.js"
 
 /**

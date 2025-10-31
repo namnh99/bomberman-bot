@@ -43,12 +43,13 @@ export function isTileSafeByTime(
   // Total time with safety margin for network delays and alignment
   const timeToReach = stepsToReach * timePerGridCell + alignmentOverhead
 
+  // WebSocket has low latency (~10-50ms typically)
   // EMERGENCY MODE: Use minimal buffers for desperate situations
   // NORMAL MODE: Balanced buffers for safety
   const speedSafetyFactor = Math.max(1, 2 / currentSpeed) // Slower = higher factor
   const networkBuffer = emergencyMode
-    ? 200 * speedSafetyFactor // EMERGENCY: 200-400ms (minimal!)
-    : 300 * speedSafetyFactor // NORMAL: 300-600ms (reduced from 400ms)
+    ? 100 * speedSafetyFactor // EMERGENCY: 100-200ms (WebSocket optimized)
+    : 150 * speedSafetyFactor // NORMAL: 150-300ms (WebSocket optimized)
 
   // Debug logging for timing calculations (only log first few checks)
   if (stepsToReach <= 3 && bombs.length > 0) {
@@ -112,11 +113,11 @@ export function isTileSafeByTime(
     // Check if tile IS the bomb location
     if (x === gridBombX && y === gridBombY) {
       // Only allow crossing the bomb tile if we can pass BEFORE it explodes
-      // EMERGENCY: Minimal buffer (800ms) - desperate situations
-      // NORMAL: Reduced buffer (1500ms) - allows crossing with reasonable safety
+      // EMERGENCY: Minimal buffer (600ms) - desperate situations
+      // NORMAL: Balanced buffer (1000ms) - safe crossing with reasonable margin
       const BOMB_TILE_BUFFER = emergencyMode
-        ? 800 + networkBuffer // EMERGENCY: 1.0-1.2s (risky but may save life!)
-        : 1500 + networkBuffer // NORMAL: 1.8-2.1s (reduced from 2000ms)
+        ? 600 + networkBuffer // EMERGENCY: 700-800ms (WebSocket optimized)
+        : 1000 + networkBuffer // NORMAL: 1150-1300ms (WebSocket optimized)
       const canCrossSafely =
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - BOMB_TILE_BUFFER
 
@@ -159,11 +160,11 @@ export function isTileSafeByTime(
       const crossingTime = timePerGridCell // Time to fully cross this dangerous tile
 
       // Can only pass through if we reach BEFORE bomb explodes AND have buffer time
-      // EMERGENCY: Minimal buffer (500ms) + crossing time - desperate escape
-      // NORMAL: Safe buffer (800ms) + crossing time - ensures bot exits blast zone before explosion
+      // EMERGENCY: Minimal buffer (400ms) + crossing time - desperate escape
+      // NORMAL: Balanced buffer (600ms) + crossing time - safe crossing
       const SAFETY_BUFFER = emergencyMode
-        ? 500 + networkBuffer + crossingTime // EMERGENCY: ~1.4-1.6s (minimal but accounts for crossing!)
-        : 800 + networkBuffer + crossingTime // NORMAL: ~1.8-2.0s (safe crossing time)
+        ? 400 + networkBuffer + crossingTime // EMERGENCY: ~1.3-1.5s (WebSocket optimized)
+        : 600 + networkBuffer + crossingTime // NORMAL: ~1.5-1.7s (WebSocket optimized)
       const canPassSafely =
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - SAFETY_BUFFER
 

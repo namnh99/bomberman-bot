@@ -1,20 +1,8 @@
 import { GRID_SIZE, DIRS, WALKABLE, BREAKABLE, STEP_DELAY } from "../../utils/constants.js"
-import { inBounds, posKey, toGridCoords, isWalkable } from "../../utils/gridUtils.js"
+import { inBounds, posKey } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap } from "./dangerMap.js"
-import { isTileSafeByTime, getSafeTimeMargin } from "./safetyEvaluator.js"
+import { isTileSafeByTime } from "./safetyEvaluator.js"
 
-/**
- * A unified BFS that finds the best path to a target, avoiding active bomb zones
- * and keeping track of breakable chests in the way.
- * @param {Array} map - Game map
- * @param {Object} start - Starting position {x, y}
- * @param {Array} targets - Array of target positions
- * @param {Array} bombs - Array of bombs
- * @param {Array} allBombers - Array of all bombers
- * @param {string} myUid - Current player UID
- * @param {boolean} isEscaping - Whether this is an escape path (allows crossing danger)
- * @returns {Object|null} {path: Array, walls: Array} or null if no path found
- */
 /**
  * Find best path to targets, avoiding bomb zones
  * @param {Array} map - Game map

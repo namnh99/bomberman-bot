@@ -1,4 +1,4 @@
-import { GRID_SIZE, DIRS, ITEM_VALUES, ITEMS } from "../../utils/constants.js"
+import { DIRS, ITEM_VALUES, ITEMS } from "../../utils/constants.js"
 import { toGridCoords, posKey, inBounds, canExplosionReach } from "../../utils/gridUtils.js"
 import { findUnsafeTiles } from "../pathfinding/dangerMap.js"
 

@@ -1,7 +1,6 @@
 import { findSafeTiles } from "../pathfinding/dangerMap.js"
 import { calculateDangerTimeline, findSafestTimedPath } from "../pathfinding/timingAnalyzer.js"
 import { manhattanDistance, posKey } from "../../utils/gridUtils.js"
-import { DIRS } from "../../utils/constants.js"
 import { findBestPath } from "../pathfinding/index.js"
 
 /**

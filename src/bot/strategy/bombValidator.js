@@ -1,4 +1,4 @@
-import { findSafeTiles } from "../pathfinding/dangerMap.js"
+import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { toGridCoords } from "../../utils/gridUtils.js"
 import { GRID_SIZE } from "../../utils/constants.js"
@@ -86,20 +86,36 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   // Bomb timer from server (typically 5000ms)
   const BOMB_EXPLOSION_TIME = futureBombs[futureBombs.length - 1]?.lifeTime || 5000
 
-  // We need a LARGE safety buffer - accounting for:
-  // 1. Network delays (200-300ms)
+  // We need a balanced safety buffer - accounting for:
+  // 1. WebSocket network delays (50-100ms typically, not 200-300ms)
   // 2. Alignment overhead (already added above)
   // 3. Server tick sync (20-40ms)
+  // 4. Movement delays and obstacles (50-100ms)
+  //
+  // ADAPTIVE BUFFER: Lower buffer when bot has many bombs (aggressive play)
+  // Higher buffer when bot has few bombs (conservative play)
+  const bombCountFactor = Math.max(0.7, Math.min(1.0, myBomber.bombCount / 3)) // 0.7-1.0x based on bomb count
+
   // Buffer scales with speed - slower movement needs more buffer
   const speedSafetyFactor = Math.max(1, 2 / myBomber.speed)
-  const ESCAPE_SAFETY_BUFFER = 1200 * speedSafetyFactor // 1.2-2.4s safety margin (speed-dependent)
+
+  // OPTIMIZED BUFFER for WebSocket: 800-1600ms (reduced from 1200-2400ms)
+  // With bombCountFactor: 560-1600ms (more aggressive with more bombs)
+  const BASE_BUFFER = 800 * speedSafetyFactor
+  const ESCAPE_SAFETY_BUFFER = BASE_BUFFER * bombCountFactor
   const availableTime = BOMB_EXPLOSION_TIME - ESCAPE_SAFETY_BUFFER
 
   console.log(
-    `   ⏱️  Escape timing: ${stepsNeeded} steps × ${timePerStep.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalEscapeTime.toFixed(0)}ms | Available: ${availableTime.toFixed(0)}ms (buffer: ${ESCAPE_SAFETY_BUFFER.toFixed(0)}ms)`,
+    `   ⏱️  Escape timing: ${stepsNeeded} steps × ${timePerStep.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalEscapeTime.toFixed(0)}ms`,
+  )
+  console.log(
+    `   📊 Buffer: ${ESCAPE_SAFETY_BUFFER.toFixed(0)}ms (base ${BASE_BUFFER.toFixed(0)}ms × bombCount ${bombCountFactor.toFixed(2)}x) | Available: ${availableTime.toFixed(0)}ms`,
   )
 
   if (totalEscapeTime >= availableTime) {
+    console.log(
+      `   ❌ ESCAPE TOO SLOW: Need ${totalEscapeTime.toFixed(0)}ms but only ${availableTime.toFixed(0)}ms available - REFUSING TO BOMB (suicide prevention)`,
+    )
     return {
       canBomb: false,
       escapePath: escapePath.path,
@@ -108,6 +124,35 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
       availableTime: availableTime,
     }
   }
+
+  // CRITICAL SAFETY CHECK: Verify escape destination is truly safe
+  // Calculate where bot will end up after escape
+  let finalX = bx
+  let finalY = by
+  for (const step of escapePath.path) {
+    if (step === "UP") finalY--
+    else if (step === "DOWN") finalY++
+    else if (step === "LEFT") finalX--
+    else if (step === "RIGHT") finalX++
+  }
+
+  // Check if final position is in danger zone
+  const unsafeTilesAfterBomb = findUnsafeTiles(map, futureBombs, bombers)
+  const finalPosKey = `${finalX},${finalY}`
+  if (unsafeTilesAfterBomb.has(finalPosKey)) {
+    console.log(
+      `   ❌ ESCAPE DESTINATION UNSAFE: [${finalX}, ${finalY}] is in blast zone - REFUSING TO BOMB (suicide prevention)`,
+    )
+    return {
+      canBomb: false,
+      escapePath: null,
+      reason: "unsafe_destination",
+    }
+  }
+
+  console.log(
+    `   ✅ BOMB VALIDATED: Escape to [${finalX}, ${finalY}] is safe with ${(availableTime - totalEscapeTime).toFixed(0)}ms margin`,
+  )
 
   return {
     canBomb: true,

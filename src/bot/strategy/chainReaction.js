@@ -1,5 +1,5 @@
-import { DIRS, GRID_SIZE, ITEMS } from "../../utils/constants.js"
-import { toGridCoords, canExplosionReach, posKey, inBounds } from "../../utils/gridUtils.js"
+import { DIRS, ITEMS } from "../../utils/constants.js"
+import { toGridCoords, posKey, inBounds } from "../../utils/gridUtils.js"
 
 /**
  * Calculate the value of chain reactions from a bomb placement
