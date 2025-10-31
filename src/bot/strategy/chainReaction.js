@@ -64,7 +64,7 @@ export function calculateChainReactionValue(bombX, bombY, map, bombs, allBombers
 
   for (const tileKey of destroyed) {
     const [x, y] = tileKey.split(",").map(Number)
-    if (!inBounds(x, y, map)) continue
+    if (!inBounds(x, y)) continue
 
     const cell = map[y][x]
     if (cell === "C") chestsDestroyed++
@@ -96,7 +96,7 @@ function getExplosionTiles(centerX, centerY, range, map) {
       const nx = centerX + dx * step
       const ny = centerY + dy * step
 
-      if (!inBounds(nx, ny, map)) break
+      if (!inBounds(nx, ny)) break
 
       tiles.push({ x: nx, y: ny })
 
@@ -128,7 +128,7 @@ export function findChainReactionOpportunities(
       const bombX = myPos.x + dx
       const bombY = myPos.y + dy
 
-      if (!inBounds(bombX, bombY, map)) continue
+      if (!inBounds(bombX, bombY)) continue
 
       const cell = map[bombY][bombX]
       // Can only place bombs on walkable tiles

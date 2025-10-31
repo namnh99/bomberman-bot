@@ -28,7 +28,7 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
         const nx = gridBombX + dx * step
         const ny = gridBombY + dy * step
 
-        if (!inBounds(nx, ny, map)) break
+        if (!inBounds(nx, ny)) break
         if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
 
         unsafeCoords.add(posKey(nx, ny))

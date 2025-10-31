@@ -1,4 +1,11 @@
-import { GRID_SIZE, DIRS, WALKABLE, BLOCKABLE_EXPLOSION } from "./constants.js"
+import {
+  GRID_SIZE,
+  DIRS,
+  WALKABLE,
+  BLOCKABLE_EXPLOSION,
+  MAP_HEIGHT,
+  MAP_WIDTH,
+} from "./constants.js"
 
 /**
  * Convert pixel coordinates to grid coordinates
@@ -23,17 +30,15 @@ export function toPixelCoords(gridX, gridY) {
 /**
  * Check if coordinates are within map bounds
  */
-export function inBounds(x, y, map) {
-  const h = map.length
-  const w = map[0].length
-  return x >= 0 && y >= 0 && x < w && y < h
+export function inBounds(x, y) {
+  return x > 0 && y > 0 && x < MAP_WIDTH && y < MAP_HEIGHT
 }
 
 /**
  * Check if a tile is walkable
  */
 export function isWalkable(x, y, map) {
-  if (!inBounds(x, y, map)) return false
+  if (!inBounds(x, y)) return false
   return WALKABLE.includes(map[y][x])
 }
 
@@ -82,7 +87,7 @@ export function canExplosionReach(bombX, bombY, targetX, targetY, map, range) {
       const nx = bombX + dx * step
       const ny = bombY + dy * step
 
-      if (!inBounds(nx, ny, map)) break
+      if (!inBounds(nx, ny)) break
       if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
       if (nx === targetX && ny === targetY) return true
     }

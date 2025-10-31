@@ -157,6 +157,7 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   return {
     canBomb: true,
     escapePath: escapePath.path,
+    escapeCoordinates: escapePath.fullPathCoordinates || [],
     escapeAction: escapePath.path[0],
     reason: "safe",
     safeTilesCount: futureSafeTiles.length,

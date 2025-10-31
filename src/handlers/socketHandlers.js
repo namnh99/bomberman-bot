@@ -57,7 +57,7 @@ export function registerSocketHandlers(
         if (hasMovedAway) {
           bombTracker.remove(bombId)
 
-          // Find the bomb in currentState and update its flag
+          // Find the bomb in currentState and update its flag when bot moves away
           const bomb = gameContext.currentState.bombs.find((b) => b.id === bombId)
           if (bomb && bomb.walkable) bomb.walkable = false
         }
@@ -91,11 +91,9 @@ export function registerSocketHandlers(
     const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
 
     // Check if Bot is standing on the bomb tile when it's placed
-    // ONLY set walkable if this is OUR bomb (we just placed it)
+    // ONLY set walkable if Bot is on the bomb tile
     let botOnTheBomb = false
-    if (myBomber) {
-      botOnTheBomb = isBomberOnBombTile(myBomber, bombX, bombY)
-    }
+    if (myBomber) botOnTheBomb = isBomberOnBombTile(myBomber, bombX, bombY)
     bomb.walkable = botOnTheBomb
 
     if (!bombTracker.has(bomb.id) && botOnTheBomb) {
@@ -186,26 +184,19 @@ function handleNewBombDuringPath(
         gameContext.currentState.bombers,
       )
 
-      // Calculate DESTINATION from CURRENT position (not start position)
-      let finalX = playerGridPos.x
-      let finalY = playerGridPos.y
-
-      const escapePath = pathModeManager.escapePath
-      for (const step of escapePath) {
-        if (step === "UP") finalY--
-        else if (step === "DOWN") finalY++
-        else if (step === "LEFT") finalX--
-        else if (step === "RIGHT") finalX++
-      }
-
-      const destinationUnsafe = unsafeTiles.has(`${finalX},${finalY}`)
+      // Get destination from stored coordinates (no recalculation!)
+      const destination = pathModeManager.getEscapeDestination()
+      const destinationUnsafe = destination
+        ? unsafeTiles.has(`${destination.x},${destination.y}`)
+        : true
       const currentUnsafe = unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)
 
+      const escapePath = pathModeManager.escapePath
       console.log(
         `   Current: [${playerGridPos.x}, ${playerGridPos.y}] ${currentUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
       )
       console.log(
-        `   Destination: [${finalX}, ${finalY}] ${destinationUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
+        `   Destination: [${destination?.x}, ${destination?.y}] ${destinationUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
       )
       console.log(`   Path remaining: ${escapePath.join(" → ")}`)
 

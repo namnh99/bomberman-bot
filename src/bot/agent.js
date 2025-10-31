@@ -166,7 +166,7 @@ function applyBacktrackGuard(action, player, map, bombs, bombers) {
     const ny = player.y + ady
 
     // bounds and walkable check
-    if (!inBounds(nx, ny, map)) continue
+    if (!inBounds(nx, ny)) continue
     if (!WALKABLE.includes(map[ny][nx])) continue
 
     // CRITICAL: Check if this direction leads into danger
@@ -278,6 +278,7 @@ function handleTarget(result, state, myUid) {
             escapeAction: validation.escapeAction,
             isEscape: true,
             fullPath: validation.escapePath,
+            fullPathCoordinates: validation.escapeCoordinates || [],
           }
         }
       }
@@ -296,7 +297,11 @@ function handleTarget(result, state, myUid) {
     console.log("=".repeat(60) + "\n")
     trackDecision(player, result.path[0])
     // Return the full path so the client can follow the entire route and avoid local oscillation
-    return { action: result.path[0], fullPath: result.path }
+    return {
+      action: result.path[0],
+      fullPath: result.path,
+      fullPathCoordinates: result.fullPathCoordinates || [],
+    }
   }
 
   // SPECIAL CASE: Already at target bombing position (path.length === 0, no walls blocking)
@@ -317,7 +322,7 @@ function handleTarget(result, state, myUid) {
         const nx = player.x + dx
         const ny = player.y + dy
 
-        if (inBounds(nx, ny, map) && WALKABLE.includes(map[ny][nx])) {
+        if (inBounds(nx, ny) && WALKABLE.includes(map[ny][nx])) {
           const hasBomb = bombs.some((b) => {
             const { x, y } = toGridCoords(b.x, b.y)
             return x === nx && y === ny && !b.walkable
@@ -432,6 +437,7 @@ function handleTarget(result, state, myUid) {
                 escapeAction: escapePath.path[0],
                 isEscape: true,
                 fullPath: escapePath.path,
+                fullPathCoordinates: escapePath.fullPathCoordinates || [],
               }
             }
           } else {
@@ -602,6 +608,7 @@ export function decideNextAction(state, myUid) {
           action: advancedEscape.path[0],
           isEscape: true,
           fullPath: advancedEscape.path,
+          fullPathCoordinates: advancedEscape.fullPathCoordinates || [],
         }
       } else {
         console.log(`   ⚠️ Advanced escape failed, falling back to standard escape`)
@@ -691,7 +698,11 @@ export function decideNextAction(state, myUid) {
                   console.log("=".repeat(90) + "\n")
                   trackDecision(player, pathToTrap.path[0])
                   // Return full path so client can follow complete route to trap position
-                  return { action: pathToTrap.path[0], fullPath: pathToTrap.path }
+                  return {
+                    action: pathToTrap.path[0],
+                    fullPath: pathToTrap.path,
+                    fullPathCoordinates: pathToTrap.fullPathCoordinates || [],
+                  }
                 }
               }
             }
@@ -1019,6 +1030,7 @@ export function decideNextAction(state, myUid) {
               action: escapePath.path[0],
               isEscape: true,
               fullPath: escapePath.path,
+              fullPathCoordinates: escapePath.fullPathCoordinates || [],
             }
           }
           return { action: "STAY" }
@@ -1121,6 +1133,7 @@ export function decideNextAction(state, myUid) {
                       isEscape: true,
                       escapeAction: escapePath.path[0],
                       fullPath: escapePath.path,
+                      fullPathCoordinates: escapePath.fullPathCoordinates || [],
                     }
                   } else {
                     console.log(`   ❌ No escape path found after bombing`)
@@ -1380,6 +1393,7 @@ export function decideNextAction(state, myUid) {
                   isEscape: true,
                   escapeAction: escapePath.path[0],
                   fullPath: escapePath.path,
+                  fullPathCoordinates: escapePath.fullPathCoordinates || [],
                   isDefense: true,
                 }
               } else {
@@ -1471,7 +1485,11 @@ export function decideNextAction(state, myUid) {
                       console.log("   🎯 DECISION: MOVE (towards enemy)")
                       trackDecision(player, pathToAdj.path[0])
                       // Provide full path so client can follow complete route toward enemy
-                      return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
+                      return {
+                        action: pathToAdj.path[0],
+                        fullPath: pathToAdj.path,
+                        fullPathCoordinates: pathToAdj.fullPathCoordinates || [],
+                      }
                     }
                   }
                 }
@@ -1480,7 +1498,11 @@ export function decideNextAction(state, myUid) {
               console.log("   ⚠️ No bombs available, chasing enemy")
               if (pathToAdj.path.length > 0) {
                 trackDecision(player, pathToAdj.path[0])
-                return { action: pathToAdj.path[0], fullPath: pathToAdj.path }
+                return {
+                  action: pathToAdj.path[0],
+                  fullPath: pathToAdj.path,
+                  fullPathCoordinates: pathToAdj.fullPathCoordinates || [],
+                }
               }
             }
           }
@@ -1500,7 +1522,7 @@ export function decideNextAction(state, myUid) {
   for (const [dx, dy, dir] of DIRS) {
     const nx = player.x + dx
     const ny = player.y + dy
-    if (inBounds(nx, ny, map)) {
+    if (inBounds(nx, ny)) {
       const cell = map[ny][nx]
       const isWalkable = WALKABLE.includes(cell)
       console.log(
@@ -1604,7 +1626,7 @@ export function decideNextAction(state, myUid) {
         const nx = player.x + dx
         const ny = player.y + dy
 
-        if (inBounds(nx, ny, map) && WALKABLE.includes(map[ny][nx])) {
+        if (inBounds(nx, ny) && WALKABLE.includes(map[ny][nx])) {
           // Check if there's no bomb at this tile
           const hasBomb = bombs.some((b) => {
             const { x, y } = toGridCoords(b.x, b.y)
@@ -1617,7 +1639,11 @@ export function decideNextAction(state, myUid) {
             console.log("=".repeat(90) + "\n")
             trackDecision(player, dir)
             // Return single-step fullPath for client follow consistency
-            return { action: dir, fullPath: [dir] }
+            return {
+              action: dir,
+              fullPath: [dir],
+              fullPathCoordinates: [], // Single move doesn't need coordinates
+            }
           }
         }
       }
@@ -1638,7 +1664,7 @@ export function decideNextAction(state, myUid) {
       const nx = player.x + dx
       const ny = player.y + dy
 
-      if (inBounds(nx, ny, map)) {
+      if (inBounds(nx, ny)) {
         const cell = map[ny][nx]
         if (BREAKABLE.includes(cell)) {
           nearbyObstacles.push({ x: nx, y: ny, type: cell, direction: dir })
@@ -1656,7 +1682,7 @@ export function decideNextAction(state, myUid) {
           const nx = player.x + dx * step
           const ny = player.y + dy * step
 
-          if (!inBounds(nx, ny, map)) break
+          if (!inBounds(nx, ny)) break
 
           const cell = map[ny][nx]
           if (BREAKABLE.includes(cell)) {
@@ -1699,6 +1725,7 @@ export function decideNextAction(state, myUid) {
               isEscape: true,
               escapeAction: escapePath.path[0],
               fullPath: escapePath.path,
+              fullPathCoordinates: escapePath.fullPathCoordinates || [],
             }
           } else {
             console.log(`   ⚠️ No escape path after bombing obstacles`)

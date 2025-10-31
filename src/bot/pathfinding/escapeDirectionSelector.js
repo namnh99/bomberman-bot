@@ -30,7 +30,7 @@ export function findPrioritizedEscapeDirection(map, start, bombs, allBombers, my
     const key = posKey(nx, ny)
 
     // Skip if out of bounds
-    if (!inBounds(nx, ny, map)) continue
+    if (!inBounds(nx, ny)) continue
 
     // Skip if there's a non-walkable bomb
     const bombAtTile = bombTiles.get(key)

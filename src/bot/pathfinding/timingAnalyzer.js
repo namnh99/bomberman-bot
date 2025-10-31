@@ -50,7 +50,7 @@ function getExplosionPath(bx, by, range, map) {
       const nx = bx + dx * step
       const ny = by + dy * step
 
-      if (!inBounds(nx, ny, map)) break
+      if (!inBounds(nx, ny)) break
 
       tiles.push({ x: nx, y: ny })
 
@@ -132,7 +132,7 @@ export function findSafestTimedPath(start, target, map, bombs, allBombers, curre
       const nx = current.x + dx
       const ny = current.y + dy
 
-      if (!inBounds(nx, ny, map)) continue
+      if (!inBounds(nx, ny)) continue
 
       const cell = map[ny][nx]
       if (![".", "B", "R", "S"].includes(cell)) continue

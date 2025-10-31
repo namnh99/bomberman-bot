@@ -1,8 +1,8 @@
 import "dotenv/config"
 import socketManager from "./socket/SocketManager.js"
 import { decideNextAction } from "./bot/agent.js"
-import { STEP_DELAY, GRID_SIZE, MAP_WIDTH, MAP_HEIGHT } from "./utils/constants.js"
-import { toGridCoords } from "./utils/gridUtils.js"
+import { STEP_DELAY, GRID_SIZE, DIRS } from "./utils/constants.js"
+import { inBounds, toGridCoords } from "./utils/gridUtils.js"
 
 // Import helpers
 import {
@@ -57,10 +57,16 @@ function placeBomb() {
 /**
  * Execute escape sequence after bomb placement is confirmed
  */
-function executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath) {
+function executeEscapeAfterBomb(
+  pathModeManager,
+  escapeAction,
+  isEscape,
+  fullPath,
+  fullPathCoordinates = [],
+) {
   // After placing a bomb, start the full escape sequence if available
   if (isEscape && fullPath && fullPath.length > 0) {
-    pathModeManager.startEscape(fullPath)
+    pathModeManager.startEscape(fullPath, fullPathCoordinates)
     const firstMove = pathModeManager.getNextEscapeMove()
     setTimeout(() => {
       smoothMove(firstMove, true)
@@ -77,7 +83,7 @@ function executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPat
 /**
  * Execute smooth movement to next grid cell
  */
-async function smoothMove(direction, isEscapeMove = false) {
+async function smoothMove(direction) {
   // Track movement timing
   const movementStartTime = Date.now()
 
@@ -106,19 +112,12 @@ async function smoothMove(direction, isEscapeMove = false) {
   let nextGridX = currentX
   let nextGridY = currentY
 
-  switch (direction) {
-    case "UP":
-      nextGridY--
+  for (const [dx, dy, dir] of DIRS) {
+    if (dir === direction) {
+      nextGridX += dx
+      nextGridY += dy
       break
-    case "DOWN":
-      nextGridY++
-      break
-    case "LEFT":
-      nextGridX--
-      break
-    case "RIGHT":
-      nextGridX++
-      break
+    }
   }
 
   const targetPixelX = nextGridX * GRID_SIZE + offset
@@ -126,10 +125,7 @@ async function smoothMove(direction, isEscapeMove = false) {
 
   // CRITICAL: Validate target tile is walkable before attempting to move
   if (
-    nextGridX < 0 ||
-    nextGridX >= MAP_WIDTH ||
-    nextGridY < 0 ||
-    nextGridY >= MAP_HEIGHT ||
+    !inBounds(nextGridX, nextGridY) ||
     !isWalkable(
       gameContext.currentState.map,
       nextGridX,
@@ -331,7 +327,7 @@ function makeDecision() {
 
   try {
     const decision = decideNextAction(gameContext.currentState, gameContext.myUid)
-    const { action, escapeAction, isEscape, fullPath } = decision
+    const { action, escapeAction, isEscape, fullPath, fullPathCoordinates } = decision
 
     console.log("=> Decide Next Action:", action, escapeAction, isEscape, fullPath)
 
@@ -347,7 +343,13 @@ function makeDecision() {
         if (!escapeExecuted) {
           console.log("⚠️  Bomb placement timeout - proceeding with escape anyway")
           escapeExecuted = true
-          executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath)
+          executeEscapeAfterBomb(
+            pathModeManager,
+            escapeAction,
+            isEscape,
+            fullPath,
+            fullPathCoordinates,
+          )
         }
       }, 500) // Max 500ms wait for server confirmation
 
@@ -358,7 +360,13 @@ function makeDecision() {
           clearTimeout(bombPlacementTimeout)
           console.log("✅ Bomb confirmed at current position - proceeding with escape")
           escapeExecuted = true
-          executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath)
+          executeEscapeAfterBomb(
+            pathModeManager,
+            escapeAction,
+            isEscape,
+            fullPath,
+            fullPathCoordinates,
+          )
         }
       }
 
@@ -370,7 +378,7 @@ function makeDecision() {
 
     // If this is an escape decision with a full path, enter escape mode
     if (isEscape && fullPath && fullPath.length > 0) {
-      pathModeManager.startEscape(fullPath)
+      pathModeManager.startEscape(fullPath, fullPathCoordinates)
       const firstMove = pathModeManager.getNextEscapeMove()
       smoothMove(firstMove, true)
       return
@@ -379,7 +387,7 @@ function makeDecision() {
     if (["UP", "DOWN", "LEFT", "RIGHT"].includes(action)) {
       // Check if this is a multi-step path (exploration/targeting)
       if (!isEscape && fullPath && fullPath.length > 1) {
-        pathModeManager.startFollow(fullPath)
+        pathModeManager.startFollow(fullPath, fullPathCoordinates)
         const firstMove = pathModeManager.getNextFollowMove()
         smoothMove(firstMove, false)
       } else {

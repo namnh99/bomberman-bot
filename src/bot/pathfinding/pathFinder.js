@@ -13,7 +13,7 @@ import { isTileSafeByTime } from "./safetyEvaluator.js"
  * @param {string} myUid - Player UID
  * @param {boolean} isEscaping - If true, can cross danger to reach safety
  * @param {boolean} allowTimingCrossing - If true, allow crossing bomb zones with timing checks (RISKY!)
- * @returns {Object|null} {path: Array, walls: Array} or null if no path found
+ * @returns {Object|null} {path: Array, fullPathCoordinates: Array, walls: Array} or null if no path found
  */
 export function findBestPath(
   map,
@@ -27,7 +27,7 @@ export function findBestPath(
 ) {
   const h = map.length
   const w = map[0].length
-  const queue = [[start.x, start.y, [], [], 0]] // [x, y, path, walls, stepCount]
+  const queue = [[start.x, start.y, [], [], [], 0]] // [x, y, path, pathCoordinates, walls, stepCount]
   const visited = new Set([posKey(start.x, start.y)])
 
   // Pre-calculate unsafe tiles for O(1) lookup
@@ -40,7 +40,7 @@ export function findBestPath(
   const currentSpeed = myBomber?.speed || 1
 
   while (queue.length) {
-    const [x, y, path, walls, stepCount] = queue.shift()
+    const [x, y, path, pathCoordinates, walls, stepCount] = queue.shift()
 
     // Check if we've reached a target
     if (
@@ -49,7 +49,7 @@ export function findBestPath(
         return t.x === x && t.y === y
       })
     ) {
-      return { path, walls }
+      return { path, fullPathCoordinates: pathCoordinates, walls }
     }
 
     // Explore neighbors
@@ -58,7 +58,7 @@ export function findBestPath(
       const ny = y + dy
       const key = posKey(nx, ny)
 
-      if (!inBounds(nx, ny, map) || visited.has(key)) {
+      if (!inBounds(nx, ny) || visited.has(key)) {
         continue
       }
 
@@ -117,8 +117,9 @@ export function findBestPath(
       if (WALKABLE.includes(cell)) {
         visited.add(key)
         const newPath = [...path, dir]
+        const newPathCoordinates = [...pathCoordinates, { x: nx, y: ny }]
         const newWalls = BREAKABLE.includes(cell) ? [...walls, { x: nx, y: ny }] : walls
-        queue.push([nx, ny, newPath, newWalls, stepCount + 1])
+        queue.push([nx, ny, newPath, newPathCoordinates, newWalls, stepCount + 1])
       }
     }
   }
@@ -165,7 +166,7 @@ export function findSafePath(map, start, targets, bombs, allBombers, myUid) {
  * @param {Array} allBombers - Array of all bombers
  * @param {Object} myBomber - Current player's bomber object
  * @param {boolean} strictMode - If true, NEVER cross bomb zones (for critical escapes)
- * @returns {Object|null} {path: Array, target: Object, distance: number} or null
+ * @returns {Object|null} {path: Array, fullPathCoordinates: Array, target: Object, distance: number} or null
  */
 export function findShortestEscapePath(
   map,
@@ -195,13 +196,13 @@ export function findShortestEscapePath(
   // Otherwise bot gets stuck in ping-pong when surrounded by its own bombs
   const hasFutureBombs = futureBombs.length > 0
 
-  // BFS queue: [x, y, path, stepCount]
-  const queue = [[start.x, start.y, [], 0]]
+  // BFS queue: [x, y, path, pathCoordinates, stepCount]
+  const queue = [[start.x, start.y, [], [], 0]]
   const visited = new Set([posKey(start.x, start.y)])
 
   let exploredCount = 0
   while (queue.length) {
-    const [x, y, path, stepCount] = queue.shift()
+    const [x, y, path, pathCoordinates, stepCount] = queue.shift()
     exploredCount++
 
     const key = posKey(x, y)
@@ -259,7 +260,7 @@ export function findShortestEscapePath(
             const exitX = x + dx
             const exitY = y + dy
 
-            if (!inBounds(exitX, exitY, map)) {
+            if (!inBounds(exitX, exitY)) {
               exitDetails.push(`[${exitX},${exitY}]=OUT_OF_BOUNDS`)
               continue
             }
@@ -322,7 +323,12 @@ export function findShortestEscapePath(
         )
         console.log(`      📍 Path: ${path.join(" → ")}`)
 
-        return { path, target: { x, y }, distance: path.length }
+        return {
+          path,
+          fullPathCoordinates: pathCoordinates,
+          target: { x, y },
+          distance: path.length,
+        }
       }
     } else if (path.length === 0) {
       return null
@@ -336,7 +342,7 @@ export function findShortestEscapePath(
       const ny = y + dy
       const key = posKey(nx, ny)
 
-      if (!inBounds(nx, ny, map)) {
+      if (!inBounds(nx, ny)) {
         if (exploredCount <= 3) {
           console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: OUT_OF_BOUNDS`)
         }
@@ -375,7 +381,7 @@ export function findShortestEscapePath(
           console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: ✅ ADDED TO QUEUE (cell=${cell})`)
         }
         visited.add(key)
-        queue.push([nx, ny, [...path, dir], stepCount + 1])
+        queue.push([nx, ny, [...path, dir], [...pathCoordinates, { x: nx, y: ny }], stepCount + 1])
       } else {
         if (exploredCount <= 3) {
           console.log(`      [${x},${y}] → ${dir} [${nx},${ny}]: NOT_WALKABLE (cell=${cell})`)

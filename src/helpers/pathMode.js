@@ -5,8 +5,10 @@ export class PathModeManager {
   constructor() {
     this.escapeMode = false
     this.escapePath = []
+    this.escapeCoordinates = []
     this.followMode = false
     this.followPath = []
+    this.followCoordinates = []
   }
 
   // Escape Mode Methods
@@ -14,13 +16,19 @@ export class PathModeManager {
     return this.escapeMode
   }
 
-  startEscape(path) {
+  startEscape(path, coordinates = []) {
     console.log(`🚨 Entering ESCAPE MODE - ${path.length} step sequence`)
+    if (coordinates.length > 0) {
+      const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
+      console.log(`   Waypoints: ${coordStr}`)
+    }
     this.escapeMode = true
     this.escapePath = [...path]
+    this.escapeCoordinates = [...coordinates]
   }
 
   getNextEscapeMove() {
+    this.escapeCoordinates.shift() // Remove first coordinate too
     return this.escapePath.shift()
   }
 
@@ -28,16 +36,27 @@ export class PathModeManager {
     return this.escapePath.length
   }
 
+  getEscapeCoordinates() {
+    return this.escapeCoordinates
+  }
+
+  getEscapeDestination() {
+    if (this.escapeCoordinates.length === 0) return null
+    return this.escapeCoordinates[this.escapeCoordinates.length - 1]
+  }
+
   abortEscape(reason = "Path blocked") {
     console.log(`   🚨 ABORTING ESCAPE - ${reason}!`)
     this.escapeMode = false
     this.escapePath = []
+    this.escapeCoordinates = []
   }
 
   completeEscape() {
     console.log(`✅ Escape sequence completed!`)
     this.escapeMode = false
     this.escapePath = []
+    this.escapeCoordinates = []
   }
 
   // Follow Mode Methods
@@ -45,13 +64,19 @@ export class PathModeManager {
     return this.followMode
   }
 
-  startFollow(path) {
+  startFollow(path, coordinates = []) {
     console.log(`🚶 Entering FOLLOW MODE - ${path.length} step sequence`)
+    if (coordinates.length > 0) {
+      const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
+      console.log(`   Waypoints: ${coordStr}`)
+    }
     this.followMode = true
     this.followPath = [...path]
+    this.followCoordinates = [...coordinates]
   }
 
   getNextFollowMove() {
+    this.followCoordinates.shift() // Remove first coordinate too
     return this.followPath.shift()
   }
 
@@ -59,16 +84,22 @@ export class PathModeManager {
     return this.followPath.length
   }
 
+  getFollowCoordinates() {
+    return this.followCoordinates
+  }
+
   abortFollow(reason = "Path blocked") {
     console.log(`   🚨 ABORTING FOLLOW PATH - ${reason}!`)
     this.followMode = false
     this.followPath = []
+    this.followCoordinates = []
   }
 
   completeFollow() {
     console.log(`✅ Follow path completed!`)
     this.followMode = false
     this.followPath = []
+    this.followCoordinates = []
   }
 
   // General Methods
@@ -79,8 +110,10 @@ export class PathModeManager {
   clearAll() {
     this.escapeMode = false
     this.escapePath = []
+    this.escapeCoordinates = []
     this.followMode = false
     this.followPath = []
+    this.followCoordinates = []
   }
 
   getStatus() {

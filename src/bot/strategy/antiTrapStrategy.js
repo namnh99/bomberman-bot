@@ -32,7 +32,7 @@ export function detectTrapSituation(myPos, map, bombs, bombers, myUid) {
     const ny = myPos.y + dy
     const key = posKey(nx, ny)
 
-    if (!inBounds(nx, ny, map)) {
+    if (!inBounds(nx, ny)) {
       blockedByWalls++
       continue
     }

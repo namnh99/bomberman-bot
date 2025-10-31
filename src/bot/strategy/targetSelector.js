@@ -72,7 +72,7 @@ export function checkBombWouldDestroyItems(bx, by, map, range) {
       const nx = bx + dx * step
       const ny = by + dy * step
 
-      if (!inBounds(nx, ny, map)) break
+      if (!inBounds(nx, ny)) break
 
       const cell = map[ny][nx]
 
@@ -109,7 +109,7 @@ export function countChestsDestroyedByBomb(bx, by, map, range) {
       const nx = bx + dx * step
       const ny = by + dy * step
 
-      if (!inBounds(nx, ny, map)) break
+      if (!inBounds(nx, ny)) break
 
       const cell = map[ny][nx]
 
