@@ -23,7 +23,5 @@ export const ITEM_VALUES = {
   B: 2.0, // Bomb Count - valuable for offensive play
 }
 
-export const MAP_HEIGHT = 16
-export const MAP_WIDTH = 16
-
+export const MAP_SIZE = 16
 export const ITEM_PRIORITY_BIAS = 10 // Bot will prefer items if path is 10 steps longer than chest

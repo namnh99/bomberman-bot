@@ -1,11 +1,4 @@
-import {
-  GRID_SIZE,
-  DIRS,
-  WALKABLE,
-  BLOCKABLE_EXPLOSION,
-  MAP_HEIGHT,
-  MAP_WIDTH,
-} from "./constants.js"
+import { GRID_SIZE, DIRS, WALKABLE, BLOCKABLE_EXPLOSION, MAP_SIZE } from "./constants.js"
 
 /**
  * Convert pixel coordinates to grid coordinates
@@ -31,7 +24,7 @@ export function toPixelCoords(gridX, gridY) {
  * Check if coordinates are within map bounds
  */
 export function inBounds(x, y) {
-  return x > 0 && y > 0 && x < MAP_WIDTH && y < MAP_HEIGHT
+  return x > 0 && y > 0 && x < MAP_SIZE && y < MAP_SIZE
 }
 
 /**

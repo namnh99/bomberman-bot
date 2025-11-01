@@ -179,8 +179,7 @@ async function smoothMove(direction) {
         console.log(
           `   ❌ ALIGNMENT ISSUE: Bot not on grid (X%40=${currentPixelX % GRID_SIZE}, Y%40=${currentPixelY % GRID_SIZE})`,
         )
-        clearInterval(gameContext.moveIntervalId)
-        gameContext.moveIntervalId = null
+        gameContext.forceClearIntervals()
 
         // Abort current path and re-evaluate
         if (pathModeManager.isEscaping()) {

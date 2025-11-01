@@ -25,8 +25,6 @@ export function findBestPath(
   isEscaping = false,
   allowTimingCrossing = false,
 ) {
-  const h = map.length
-  const w = map[0].length
   const queue = [[start.x, start.y, [], [], [], 0]] // [x, y, path, pathCoordinates, walls, stepCount]
   const visited = new Set([posKey(start.x, start.y)])
 
@@ -176,8 +174,6 @@ export function findShortestEscapePath(
   myBomber,
   strictMode = false,
 ) {
-  const h = map.length
-  const w = map[0].length
   const currentSpeed = myBomber.speed || 1
 
   const bombTiles = createBombTileMap(bombs)

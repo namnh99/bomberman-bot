@@ -1,4 +1,4 @@
-import { DIRS, BLOCKABLE_EXPLOSION } from "../../utils/constants.js"
+import { DIRS, BLOCKABLE_EXPLOSION, BREAKABLE, MAP_SIZE, ITEMS } from "../../utils/constants.js"
 import { inBounds, posKey, toGridCoords } from "../../utils/gridUtils.js"
 
 /**
@@ -10,8 +10,6 @@ import { inBounds, posKey, toGridCoords } from "../../utils/gridUtils.js"
  */
 export function findUnsafeTiles(map, bombs = [], allBombers = []) {
   const unsafeCoords = new Set()
-  const h = map.length
-  const w = map[0].length
 
   for (const bomb of bombs) {
     if (bomb.isExploded) continue
@@ -48,12 +46,10 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
  */
 export function findSafeTiles(map, bombs = [], allBombers = []) {
   const safeTiles = []
-  const h = map.length
-  const w = map[0].length
   const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
 
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+  for (let y = 0; y < MAP_SIZE; y++) {
+    for (let x = 0; x < MAP_SIZE; x++) {
       if (map[y][x] === null && !unsafeTiles.has(posKey(x, y))) {
         safeTiles.push({ x, y })
       }

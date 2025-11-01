@@ -58,9 +58,6 @@ export function isTileSafeByTime(
     )
   }
 
-  const h = map.length
-  const w = map[0].length
-
   // Check each bomb to see if it will explode before we reach this tile
   for (const bomb of bombs) {
     if (bomb.isExploded) continue
