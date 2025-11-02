@@ -11,6 +11,18 @@ export function toGridCoords(pixelX, pixelY) {
 }
 
 /**
+ * Calculate bomb placement position using server's logic
+ * CRITICAL: Server uses floor((pixel + 20) / GRID_SIZE) for bomb placement
+ * Used for: predicting where bomb will be placed, escape planning
+ */
+export function toBombGridCoords(pixelX, pixelY) {
+  return {
+    x: Math.floor((pixelX + 20) / GRID_SIZE),
+    y: Math.floor((pixelY + 20) / GRID_SIZE),
+  }
+}
+
+/**
  * Convert grid coordinates to pixel coordinates
  */
 export function toPixelCoords(gridX, gridY) {

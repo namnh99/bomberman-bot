@@ -102,14 +102,16 @@ export function registerSocketHandlers(
     }
     addBomb(gameContext.currentState, bomb)
 
-    // CRITICAL: Check if new bomb affects our paths
-    handleNewBombDuringPath(
-      bomb,
-      gameContext,
-      pathModeManager,
-      manualControlManager,
-      onMakeDecision,
-    )
+    if (bomb.uid !== gameContext.myUid) {
+      // CRITICAL: Check if new bomb affects our paths
+      handleNewBombDuringPath(
+        bomb,
+        gameContext,
+        pathModeManager,
+        manualControlManager,
+        onMakeDecision,
+      )
+    }
   })
 
   // Bomb explode handler

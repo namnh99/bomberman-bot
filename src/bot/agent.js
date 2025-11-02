@@ -1,5 +1,4 @@
 import {
-  GRID_SIZE,
   DIRS,
   WALKABLE,
   BREAKABLE,
@@ -8,7 +7,7 @@ import {
   OSCILLATION_THRESHOLD,
   BOMB_EXPLOSION_TIME,
 } from "../utils/constants.js"
-import { posKey, isAdjacent, inBounds, toGridCoords } from "../utils/gridUtils.js"
+import { posKey, isAdjacent, inBounds, toGridCoords, toBombGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
@@ -198,16 +197,27 @@ function handleTarget(result, state, myUid) {
     if (isAdjacent(targetWall.x, targetWall.y, player.x, player.y)) {
       console.log("   🧱 Chest is adjacent! Considering bombing...")
 
-      // Check bombing cooldown at this position
-      if (!canBombAtPosition(player.x, player.y)) {
+      // CRITICAL: Use server's bomb placement logic to predict where bomb will be placed
+      const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
+      console.log(
+        `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+      )
+
+      // Check bombing cooldown at bomb position
+      if (!canBombAtPosition(bombPos.x, bombPos.y)) {
         console.log("   ⏳ Skipping - cooldown active at this position")
         console.log("🎯 DECISION: STAY (Bomb cooldown)")
         console.log("=".repeat(60) + "\n")
         return { action: "STAY" }
       }
 
-      // Check if bombing would destroy valuable items
-      const itemCheck = checkBombWouldDestroyItems(player.x, player.y, map, myBomber.explosionRange)
+      // Check if bombing would destroy valuable items (using bomb position)
+      const itemCheck = checkBombWouldDestroyItems(
+        bombPos.x,
+        bombPos.y,
+        map,
+        myBomber.explosionRange,
+      )
       if (itemCheck.willDestroyItems) {
         console.log(
           `   ⚠️ Bombing would destroy ${itemCheck.items.length} item(s):`,
@@ -218,9 +228,10 @@ function handleTarget(result, state, myUid) {
         return { action: "STAY" }
       }
 
+      // Check chests that would be destroyed by bomb (using bomb position)
       const chestCount = countChestsDestroyedByBomb(
-        player.x,
-        player.y,
+        bombPos.x,
+        bombPos.y,
         map,
         myBomber.explosionRange,
       )
@@ -230,7 +241,6 @@ function handleTarget(result, state, myUid) {
       )
 
       // CRITICAL SAFETY CHECK: Validate bomb safety BEFORE placing
-      const bombPos = { x: player.x, y: player.y }
       const validation = validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid)
 
       if (!validation.canBomb) {
@@ -251,13 +261,16 @@ function handleTarget(result, state, myUid) {
         console.log(
           `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} blocking chest${chestCount.count > 1 ? "s" : ""})`,
         )
-        console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
+        console.log(
+          "   💣 Bombing from",
+          `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+        )
         console.log("   🏃 Escape action:", validation.escapeAction)
         console.log("=".repeat(60) + "\n")
 
         if (myBomber.bombCount > 0) {
-          // Record bomb placement to prevent spam
-          recordBombPlacement(player.x, player.y)
+          // Record bomb placement to prevent spam (using actual bomb position)
+          recordBombPlacement(bombPos.x, bombPos.y)
 
           return {
             action: "BOMB",
@@ -368,8 +381,19 @@ function handleTarget(result, state, myUid) {
       return { action: "STAY" }
     }
 
-    // Check if there are chests adjacent to bomb
-    const chestCount = countChestsDestroyedByBomb(player.x, player.y, map, myBomber.explosionRange)
+    // CRITICAL: Use server's bomb placement logic to predict where bomb will be placed
+    const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
+    console.log(
+      `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+    )
+
+    // Check if there are chests adjacent to bomb position (not player position!)
+    const chestCount = countChestsDestroyedByBomb(
+      bombPos.x,
+      bombPos.y,
+      map,
+      myBomber.explosionRange,
+    )
 
     if (chestCount.count > 0 && myBomber.bombCount > 0) {
       console.log(
@@ -377,16 +401,21 @@ function handleTarget(result, state, myUid) {
         chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
       )
 
-      // Check bombing cooldown
-      if (!canBombAtPosition(player.x, player.y)) {
+      // Check bombing cooldown (using bomb position, not player position)
+      if (!canBombAtPosition(bombPos.x, bombPos.y)) {
         console.log("   ⏳ Bomb cooldown active, waiting...")
         console.log("🎯 DECISION: STAY (Cooldown)")
         console.log("=".repeat(60) + "\n")
         return { action: "STAY" }
       }
 
-      // Check if bombing would destroy items
-      const itemCheck = checkBombWouldDestroyItems(player.x, player.y, map, myBomber.explosionRange)
+      // Check if bombing would destroy items (using bomb position)
+      const itemCheck = checkBombWouldDestroyItems(
+        bombPos.x,
+        bombPos.y,
+        map,
+        myBomber.explosionRange,
+      )
       if (itemCheck.willDestroyItems) {
         console.log(`   ⚠️ Would destroy ${itemCheck.items.length} item(s), skipping bomb`)
         console.log(`   🚶 Moving away to avoid destroying items`)
@@ -398,19 +427,23 @@ function handleTarget(result, state, myUid) {
       } else {
         // Only proceed with bombing if we won't destroy items
 
-        // Validate escape path
+        // Validate escape path (using bomb position)
         const futureBombs = [
           ...bombs,
-          createFutureBomb(player.x, player.y, myBomber.explosionRange, myBomber.uid),
+          createFutureBomb(bombPos.x, bombPos.y, myBomber.explosionRange, myBomber.uid),
         ]
         const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
 
         if (futureSafeTiles.length > 0) {
+          // CRITICAL: Escape path must start from BOMB position, not player's current grid
+          // Because server places bomb using toBombGridCoords logic, which may differ from player grid
+          const escapeStartPos = { x: bombPos.x, y: bombPos.y }
+
           // CRITICAL: Use findShortestEscapePath instead of findBestPath
           // This ensures the escape destination has valid exits (not deadlocked by walls/chests)
           const escapePath = findShortestEscapePath(
             map,
-            player,
+            escapeStartPos, // Start from bomb position, not player position!
             futureBombs,
             bombers,
             myBomber,
@@ -450,11 +483,14 @@ function handleTarget(result, state, myUid) {
               console.log(
                 `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
               )
-              console.log("   💣 Bombing from current position")
+              console.log(
+                "   💣 Bombing from grid position",
+                `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+              )
               console.log("   🏃 Escape action:", escapePath.path[0])
               console.log("=".repeat(60) + "\n")
 
-              recordBombPlacement(player.x, player.y)
+              recordBombPlacement(bombPos.x, bombPos.y)
 
               return {
                 action: "BOMB",
@@ -1041,13 +1077,21 @@ export function decideNextAction(state, myUid) {
       } else {
         console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
 
+        // CRITICAL: Use server's bomb placement logic
+        const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
+        console.log(
+          `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+        )
+
         const bombAlreadyHere = bombs.some((bomb) => {
           const { gridX, gridY } = getBombWithGrid(bomb)
-          return gridX === player.x && gridY === player.y
+          return gridX === bombPos.x && gridY === bombPos.y
         })
 
         if (bombAlreadyHere) {
-          console.log(`   ⏸️  Bomb already exists at [${player.x}, ${player.y}], escaping instead`)
+          console.log(
+            `   ⏸️  Bomb already exists at [${bombPos.x}, ${bombPos.y}], escaping instead`,
+          )
           const escapePath = findShortestEscapePath(map, player, bombs, bombers, myBomber)
           if (escapePath && escapePath.path.length > 0) {
             return {
@@ -1062,8 +1106,8 @@ export function decideNextAction(state, myUid) {
 
         if (myBomber.bombCount > 0) {
           const itemCheck = checkBombWouldDestroyItems(
-            player.x,
-            player.y,
+            bombPos.x,
+            bombPos.y,
             map,
             myBomber.explosionRange,
           )
@@ -1111,8 +1155,8 @@ export function decideNextAction(state, myUid) {
               console.log("   🎯 Skipping bomb placement - will focus on staying safe")
             } else {
               const chestCount = countChestsDestroyedByBomb(
-                player.x,
-                player.y,
+                bombPos.x,
+                bombPos.y,
                 map,
                 myBomber.explosionRange,
               )
@@ -1125,16 +1169,19 @@ export function decideNextAction(state, myUid) {
                 const now = Date.now()
                 const futureBombs = [
                   ...bombs,
-                  createFutureBomb(player.x, player.y, myBomber.explosionRange, myBomber.uid),
+                  createFutureBomb(bombPos.x, bombPos.y, myBomber.explosionRange, myBomber.uid),
                 ]
                 const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
                 console.log(`   Future safe tiles after bombing: ${futureSafeTiles.length}`)
 
                 if (futureSafeTiles.length > 0) {
+                  // CRITICAL: Escape from bomb position, not player position
+                  const escapeStartPos = { x: bombPos.x, y: bombPos.y }
+
                   // Use findShortestEscapePath to ensure escape destination is not trapped
                   const escapePath = findShortestEscapePath(
                     map,
-                    player,
+                    escapeStartPos,
                     futureBombs,
                     bombers,
                     myBomber,
@@ -1145,7 +1192,10 @@ export function decideNextAction(state, myUid) {
                     console.log(
                       `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
                     )
-                    console.log("   💣 Bombing from", `[${player.x}, ${player.y}]`)
+                    console.log(
+                      "   💣 Bombing from grid",
+                      `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+                    )
                     console.log("   🏃 Escape action:", escapePath.path[0])
                     console.log("=".repeat(90) + "\n")
 
@@ -1363,15 +1413,21 @@ export function decideNextAction(state, myUid) {
         console.log(`   ⚔️ Enemy adjacent at [${enemy.x},${enemy.y}] - DEFENSE MODE!`)
 
         if (myBomber.bombCount > 0) {
+          // CRITICAL: Use server's bomb placement logic
+          const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
+          console.log(
+            `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+          )
+
           // Check bombing cooldown
-          if (!canBombAtPosition(player.x, player.y)) {
+          if (!canBombAtPosition(bombPos.x, bombPos.y)) {
             console.log("   ⏳ Bomb cooldown active, skipping enemy bomb")
             continue
           }
 
           const itemCheck = checkBombWouldDestroyItems(
-            player.x,
-            player.y,
+            bombPos.x,
+            bombPos.y,
             map,
             myBomber.explosionRange,
           )
@@ -1385,8 +1441,8 @@ export function decideNextAction(state, myUid) {
           }
 
           const willHit = willBombHitEnemy(
-            player.x,
-            player.y,
+            bombPos.x,
+            bombPos.y,
             enemy.x,
             enemy.y,
             map,
@@ -1396,14 +1452,17 @@ export function decideNextAction(state, myUid) {
           if (willHit) {
             const futureBombs = [
               ...bombs,
-              createFutureBomb(player.x, player.y, myBomber.explosionRange, myBomber.uid),
+              createFutureBomb(bombPos.x, bombPos.y, myBomber.explosionRange, myBomber.uid),
             ]
 
             const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
             if (futureSafeTiles.length > 0) {
+              // CRITICAL: Escape from bomb position
+              const escapeStartPos = { x: bombPos.x, y: bombPos.y }
+
               const escapePath = findBestPath(
                 map,
-                player,
+                escapeStartPos,
                 futureSafeTiles,
                 futureBombs,
                 bombers,
@@ -1416,7 +1475,7 @@ export function decideNextAction(state, myUid) {
                 console.log(`      Escape: ${escapePath.path.join(" → ")}`)
 
                 // Record bomb placement
-                recordBombPlacement(player.x, player.y)
+                recordBombPlacement(bombPos.x, bombPos.y)
 
                 return {
                   action: "BOMB",
