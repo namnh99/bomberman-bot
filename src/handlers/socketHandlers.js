@@ -186,41 +186,76 @@ function handleNewBombDuringPath(
         gameContext.currentState.bombers,
       )
 
-      // Get destination from stored coordinates (no recalculation!)
-      const destination = pathModeManager.getEscapeDestination()
-      const destinationUnsafe = destination
-        ? unsafeTiles.has(`${destination.x},${destination.y}`)
-        : true
+      // CRITICAL: Check ENTIRE remaining escape path, not just destination
+      const escapePath = pathModeManager.escapePath
+      let pathHasUnsafeTile = false
+      let unsafeTileInfo = null
+
+      for (const step of escapePath) {
+        if (unsafeTiles.has(step)) {
+          pathHasUnsafeTile = true
+          unsafeTileInfo = step
+          break
+        }
+      }
+
       const currentUnsafe = unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)
 
-      const escapePath = pathModeManager.escapePath
       console.log(
         `   Current: [${playerGridPos.x}, ${playerGridPos.y}] ${currentUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
       )
-      console.log(
-        `   Destination: [${destination?.x}, ${destination?.y}] ${destinationUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
-      )
       console.log(`   Path remaining: ${escapePath.join(" → ")}`)
 
-      if (destinationUnsafe) {
-        console.log(`   ⚠️  Escape DESTINATION is unsafe!`)
+      if (pathHasUnsafeTile) {
+        console.log(`   ⚠️  Escape path tile [${unsafeTileInfo}] is now UNSAFE!`)
         console.log(`   🔄 ABORT ESCAPE - Finding new escape route!`)
         // Cancel current escape
-        pathModeManager.abortEscape("Destination unsafe")
+        pathModeManager.abortEscape("Path blocked by new bomb")
         gameContext.forceClearIntervals()
         // Immediately find new escape route
         onMakeDecision()
       } else {
-        console.log(`   ✅ Escape destination is safe, continuing escape...`)
+        console.log(`   ✅ Entire escape path is safe, continuing escape...`)
       }
     }
   }
-  // Check follow path (lower priority - abort if ANY tile becomes unsafe)
+  // Check follow path (lower priority)
   else if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
-    console.log(`\n🚨 NEW BOMB during follow path! Aborting and re-evaluating...`)
-    pathModeManager.abortFollow("New bomb detected")
-    gameContext.forceClearIntervals()
-    onMakeDecision()
+    const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+    if (myBomber) {
+      console.log(`\n🚨 NEW BOMB during follow path! Checking if path is still safe...`)
+
+      const unsafeTiles = findUnsafeTiles(
+        gameContext.currentState.map,
+        gameContext.currentState.bombs,
+        gameContext.currentState.bombers,
+      )
+
+      // CRITICAL: Check ENTIRE remaining follow path
+      const followPath = pathModeManager.followPath
+      let pathHasUnsafeTile = false
+      let unsafeTileInfo = null
+
+      for (const step of followPath) {
+        if (unsafeTiles.has(step)) {
+          pathHasUnsafeTile = true
+          unsafeTileInfo = step
+          break
+        }
+      }
+
+      console.log(`   Path remaining: ${followPath.join(" → ")}`)
+
+      if (pathHasUnsafeTile) {
+        console.log(`   ⚠️  Follow path tile [${unsafeTileInfo}] is now UNSAFE!`)
+        console.log(`   🔄 Aborting follow and re-evaluating...`)
+        pathModeManager.abortFollow("Path blocked by new bomb")
+        gameContext.forceClearIntervals()
+        onMakeDecision()
+      } else {
+        console.log(`   ✅ Entire follow path is safe, continuing...`)
+      }
+    }
   } else if (
     !manualControlManager.isManualMode() &&
     !pathModeManager.isEscaping() &&
@@ -248,60 +283,24 @@ function handleBombExplodeDuringPath(
   manualControlManager,
   onMakeDecision,
 ) {
-  // CRITICAL: Check safety even during follow mode
-  if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
-    const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-    if (myBomber) {
-      const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
-      const unsafeTiles = findUnsafeTiles(
-        gameContext.currentState.map,
-        gameContext.currentState.bombs,
-        gameContext.currentState.bombers,
-      )
+  // When bomb explodes, it's already removed from gameState.bombs
+  // So we can't check safety based on bombs array
+  // Safety should be checked when NEW bombs appear (handleNewBombDuringPath)
 
-      // Check if current position is now unsafe after bomb explosion
-      if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 BOMB EXPLODED - Current position now UNSAFE! Aborting follow path!`)
-        pathModeManager.abortFollow("Current position unsafe")
-        gameContext.forceClearIntervals()
-        onMakeDecision()
-        return
-      }
-
-      console.log("💥 Bomb exploded, but still safe - continuing follow path")
-    }
-  } else if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
-    // CRITICAL: Even during escape, check if we're still safe
-    const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-    if (myBomber) {
-      const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
-      const unsafeTiles = findUnsafeTiles(
-        gameContext.currentState.map,
-        gameContext.currentState.bombs,
-        gameContext.currentState.bombers,
-      )
-
-      // Check if current position became unsafe after bomb explosion
-      if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 BOMB EXPLODED - Current position now UNSAFE during escape!`)
-        console.log(`   Re-evaluating escape immediately...`)
-        pathModeManager.abortEscape("Current position unsafe")
-        gameContext.forceClearIntervals()
-        onMakeDecision()
-        return
-      }
-
-      console.log("💥 Bomb exploded during escape, but still safe - continuing")
-    }
-  } else if (gameContext.waitingForBombPlacement) {
+  // Only re-evaluate if not in any mode
+  if (gameContext.waitingForBombPlacement) {
     console.log("💣 Waiting for bomb placement, ignoring bomb exploded event")
   } else if (
     !manualControlManager.isManualMode() &&
+    !pathModeManager.isEscaping() &&
+    !pathModeManager.isFollowing() &&
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
     console.log("💥 Bomb exploded, re-evaluating...")
     onMakeDecision()
+  } else {
+    console.log("💥 Bomb exploded - path continues (safety checked on new_bomb events)")
   }
 }
 
@@ -314,38 +313,22 @@ function handleChestDestroyedDuringPath(
   manualControlManager,
   onMakeDecision,
 ) {
-  // CRITICAL: Check safety even during follow mode (chest destroyed means bomb exploded nearby)
-  if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
-    const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-    if (myBomber) {
-      const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
-      const unsafeTiles = findUnsafeTiles(
-        gameContext.currentState.map,
-        gameContext.currentState.bombs,
-        gameContext.currentState.bombers,
-      )
+  // Chest destroyed means a bomb exploded (already removed from bombs array)
+  // Safety should be checked when NEW bombs appear, not when they explode
 
-      // Check if current position is now unsafe after chest destruction
-      if (unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)) {
-        console.log(`🚨 CHEST DESTROYED - Current position now UNSAFE! Aborting follow path!`)
-        pathModeManager.abortFollow("Current position unsafe")
-        gameContext.forceClearIntervals()
-        onMakeDecision()
-        return
-      }
-
-      console.log("🧱 Chest destroyed, but still safe - continuing follow path")
-    }
-  } else if (pathModeManager.isEscaping()) {
+  if (pathModeManager.isEscaping()) {
     console.log("🏃 Escape in progress, ignoring chest destroyed event")
   } else if (gameContext.waitingForBombPlacement) {
     console.log("💣 Waiting for bomb placement, ignoring chest destroyed event")
   } else if (
     !manualControlManager.isManualMode() &&
+    !pathModeManager.isFollowing() &&
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
     console.log("🧱 Chest destroyed, re-evaluating...")
     onMakeDecision()
+  } else {
+    console.log("🧱 Chest destroyed - path continues (safety checked on new_bomb events)")
   }
 }

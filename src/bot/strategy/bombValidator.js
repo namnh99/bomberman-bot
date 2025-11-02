@@ -50,8 +50,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     futureBombs,
     bombers,
     myUid,
-    true,   // isEscape mode
-    false,  // allowTimingBasedCrossing = FALSE (strictly safe!)
+    true, // isEscape mode
+    false, // allowTimingBasedCrossing = FALSE (strictly safe!)
   )
 
   if (!escapePath || escapePath.path.length === 0) {
@@ -155,17 +155,15 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     futureBombs,
     bombers,
     myUid,
-    true,   // isEscape mode
-    false,  // allowTimingBasedCrossing = FALSE (strictly safe for future bomb!)
+    true, // isEscape mode
+    false, // allowTimingBasedCrossing = FALSE (strictly safe for future bomb!)
   )
 
   if (!secondEscapePath || secondEscapePath.path.length === 0) {
     console.log(
       `   ❌ ESCAPE DESTINATION TRAPPED: [${finalX}, ${finalY}] has no further escape - REFUSING TO BOMB (deadlock prevention)`,
     )
-    console.log(
-      `      (Can escape immediate bomb, but will be trapped by surrounding bombs/walls)`,
-    )
+    console.log(`      (Can escape immediate bomb, but will be trapped by surrounding bombs/walls)`)
     return {
       canBomb: false,
       escapePath: null,
