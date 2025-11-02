@@ -60,8 +60,6 @@ export function isTileSafeByTime(
 
   // Check each bomb to see if it will explode before we reach this tile
   for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner ? owner.explosionRange : 2
 
@@ -204,8 +202,6 @@ export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, cu
   let minTimeMargin = Infinity
 
   for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner ? owner.explosionRange : 2
     const { x: gridBombX, y: gridBombY } = toGridCoords(bomb.x, bomb.y)

@@ -12,8 +12,7 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
   const unsafeCoords = new Set()
 
   for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
+    // Try to get range from bomber owner first, fallback to bomb object
     const owner = allBombers.find((b) => b.uid === bomb.uid)
     const range = owner ? owner.explosionRange : 2
 

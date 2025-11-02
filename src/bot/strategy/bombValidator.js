@@ -2,6 +2,7 @@ import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { toGridCoords } from "../../utils/gridUtils.js"
 import { GRID_SIZE } from "../../utils/constants.js"
+import { createFutureBomb } from "../helpers/index.js"
 
 /**
  * Validate if bombing is safe by checking escape routes BEFORE committing
@@ -25,16 +26,7 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // Simulate future bomb state
-  const futureBombs = [
-    ...bombs,
-    {
-      x: bx * GRID_SIZE,
-      y: by * GRID_SIZE,
-      explosionRange: myBomber.explosionRange || 1,
-      uid: myBomber.uid,
-      timestamp: Date.now(), // Simulated bomb
-    },
-  ]
+  const futureBombs = [...bombs, createFutureBomb(bx, by, myBomber.explosionRange, myBomber.uid)]
 
   // Find safe tiles after bombing
   const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
@@ -48,6 +40,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // Find escape path from bomb position
+  // CRITICAL: Use STRICT mode - must NOT cross blast zones (no timing-based)
+  // This is a FUTURE bomb we're about to place, so we need GUARANTEED escape
   const player = { x: bx, y: by }
   const escapePath = findBestPath(
     map,
@@ -56,7 +50,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     futureBombs,
     bombers,
     myUid,
-    true, // isEscape mode
+    true,   // isEscape mode
+    false,  // allowTimingBasedCrossing = FALSE (strictly safe!)
   )
 
   if (!escapePath || escapePath.path.length === 0) {
@@ -150,8 +145,39 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     }
   }
 
+  // CRITICAL: Check if escape destination itself is TRAPPED (no further escape possible)
+  // This prevents scenarios where bot escapes immediate bomb but gets trapped by multiple bombs
+  const escapeDestPos = { x: finalX, y: finalY }
+  const secondEscapePath = findBestPath(
+    map,
+    escapeDestPos,
+    futureSafeTiles,
+    futureBombs,
+    bombers,
+    myUid,
+    true,   // isEscape mode
+    false,  // allowTimingBasedCrossing = FALSE (strictly safe for future bomb!)
+  )
+
+  if (!secondEscapePath || secondEscapePath.path.length === 0) {
+    console.log(
+      `   ❌ ESCAPE DESTINATION TRAPPED: [${finalX}, ${finalY}] has no further escape - REFUSING TO BOMB (deadlock prevention)`,
+    )
+    console.log(
+      `      (Can escape immediate bomb, but will be trapped by surrounding bombs/walls)`,
+    )
+    return {
+      canBomb: false,
+      escapePath: null,
+      reason: "escape_trapped",
+    }
+  }
+
   console.log(
     `   ✅ BOMB VALIDATED: Escape to [${finalX}, ${finalY}] is safe with ${(availableTime - totalEscapeTime).toFixed(0)}ms margin`,
+  )
+  console.log(
+    `      Secondary escape available: ${secondEscapePath.path.length > 0 ? secondEscapePath.path.join(" → ") : "already safe"}`,
   )
 
   return {

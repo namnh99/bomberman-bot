@@ -469,7 +469,6 @@ function createFutureBomb(x, y, explosionRange, uid) {
     uid,
     createdAt: Date.now(),
     lifeTime: BOMB_EXPLOSION_TIME,
-    isExploded: false,
     isFuture: true, // ⭐ KEY FLAG
   }
 }

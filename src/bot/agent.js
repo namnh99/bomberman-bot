@@ -33,6 +33,7 @@ import {
   compareSingleVsMultiTarget,
 } from "./strategy/index.js"
 import { findAdvancedEscapePath } from "./strategy/advancedEscape.js"
+import { createFutureBomb } from "./helpers/index.js"
 
 // Anti-oscillation: Track last position and decision
 let lastPosition = null
@@ -42,22 +43,6 @@ let isFollowingPath = false // Track if we're following a multi-step path
 let lastEscapeFromPosition = null // Track position we just escaped from
 let lastEscapeTime = 0
 const ESCAPE_COOLDOWN_MS = 5000 // Don't return to escaped position for 5 seconds
-
-/**
- * Create a future bomb object with proper timing info for escape path calculation
- */
-function createFutureBomb(x, y, explosionRange, uid) {
-  return {
-    x: x * GRID_SIZE,
-    y: y * GRID_SIZE,
-    explosionRange,
-    uid,
-    createdAt: Date.now(),
-    lifeTime: BOMB_EXPLOSION_TIME,
-    isExploded: false,
-    isFuture: true, // Flag to distinguish from real server bombs
-  }
-}
 
 // Track recently visited positions to prevent ping-pong between adjacent tiles
 let recentPositions = [] // Array of {x, y, time}
@@ -292,6 +277,44 @@ function handleTarget(result, state, myUid) {
 
   // Move towards target
   if (result.path.length > 0) {
+    // CRITICAL SAFETY CHECK: Validate destination is NOT in imminent danger
+    // Calculate destination position
+    let destX = player.x
+    let destY = player.y
+    const firstMove = result.path[0]
+
+    if (firstMove === "UP") destY--
+    else if (firstMove === "DOWN") destY++
+    else if (firstMove === "LEFT") destX--
+    else if (firstMove === "RIGHT") destX++
+
+    // Check if destination is in blast zone of any IMMINENT bomb (< 1 second)
+    const imminentBombs = bombs.filter((bomb) => {
+      const now = Date.now()
+      const timeUntilExplosion = Math.max(0, bomb.lifeTime - (now - bomb.createdAt))
+      return timeUntilExplosion < 1000 // Less than 1 second
+    })
+
+    if (imminentBombs.length > 0) {
+      const unsafeTiles = findUnsafeTiles(map, imminentBombs, bombers)
+      const destKey = `${destX},${destY}`
+
+      if (unsafeTiles.has(destKey)) {
+        console.log(
+          `   ⚠️ SAFETY OVERRIDE: Destination [${destX},${destY}] is in blast zone of imminent bomb!`,
+        )
+        imminentBombs.forEach((b) => {
+          const { x: bx, y: by } = toGridCoords(b.x, b.y)
+          const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
+          console.log(`      💣 Bomb at [${bx},${by}] explodes in ${timeLeft.toFixed(0)}ms`)
+        })
+        console.log(`   🚫 REFUSING dangerous move - will explore instead`)
+        console.log("=".repeat(60) + "\n")
+        // Don't return - let it fall through to exploration phase
+        return null
+      }
+    }
+
     console.log("🎯 DECISION: MOVE (towards target)")
     console.log("   Action:", result.path[0])
     console.log("=".repeat(60) + "\n")
@@ -553,7 +576,6 @@ export function decideNextAction(state, myUid) {
   // Bot might be safe NOW but moving could put it in danger
   // Only consider bombs that are actually affecting the bot (nearby or in blast range)
   const relevantBombs = bombs.filter((bomb) => {
-    if (bomb.isExploded) return false
     const { x: bx, y: by } = bomb
     const distance = Math.abs(bx - player.x) + Math.abs(by - player.y)
     // Consider bombs within reasonable distance (e.g., 8 tiles)
@@ -1056,7 +1078,6 @@ export function decideNextAction(state, myUid) {
             // CRITICAL SAFETY: Check if there are any bombs about to explode NEARBY
             const now = Date.now()
             const dangerousBombs = bombs.filter((b) => {
-              if (b.isExploded) return false
               const bombCreatedAt = b.createdAt || now
               const bombLifeTime = b.lifeTime || BOMB_EXPLOSION_TIME
               const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
@@ -1182,11 +1203,18 @@ export function decideNextAction(state, myUid) {
                 map,
                 myBomber.explosionRange,
               )
+              const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
+
+              // Calculate priority score: balance between chest count and distance
+              const priorityScore = chestCount.count - distance
+
               positionScores.set(key, chestCount.count)
               adjacentTargetsWithScore.push({
                 x: adjX,
                 y: adjY,
                 chestCount: chestCount.count,
+                distance: distance,
+                priorityScore: priorityScore,
               })
             }
           }
@@ -1194,7 +1222,9 @@ export function decideNextAction(state, myUid) {
       }
     }
 
-    adjacentTargetsWithScore.sort((a, b) => b.chestCount - a.chestCount)
+    // Sort by priority score (considers both chest count and distance)
+    // Higher score = better target (more chests, closer distance)
+    adjacentTargetsWithScore.sort((a, b) => b.priorityScore - a.priorityScore)
 
     console.log(`   Adjacent chest targets: ${adjacentTargetsWithScore.length}`)
     if (adjacentTargetsWithScore.length > 0) {

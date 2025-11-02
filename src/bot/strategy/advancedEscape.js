@@ -12,7 +12,6 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
 
   // Filter to only relevant bombs (nearby bombs that affect the bot)
   const relevantBombs = bombs.filter((bomb) => {
-    if (bomb.isExploded) return false
     const distance = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
     return distance <= 8 // Only consider bombs within 8 tiles
   })
@@ -130,16 +129,12 @@ export function detectBombChains(bombs, allBombers, map) {
 
   for (let i = 0; i < bombs.length; i++) {
     const bomb1 = bombs[i]
-    if (bomb1.isExploded) continue
-
     const triggeredBombs = []
 
     for (let j = 0; j < bombs.length; j++) {
       if (i === j) continue
 
       const bomb2 = bombs[j]
-      if (bomb2.isExploded) continue
-
       // Check if bomb1's explosion will trigger bomb2
       const willTrigger = checkBombTrigger(bomb1, bomb2, allBombers, map)
 

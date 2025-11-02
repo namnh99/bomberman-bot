@@ -156,7 +156,9 @@ export function registerSocketHandlers(
     gameContext.currentState.items = data.items
   })
 
-  socket.on()
+  socket.on("user_die_update", (data) => {
+    console.log("💀 User died:", data)
+  })
 }
 
 /**
@@ -291,6 +293,8 @@ function handleBombExplodeDuringPath(
 
       console.log("💥 Bomb exploded during escape, but still safe - continuing")
     }
+  } else if (gameContext.waitingForBombPlacement) {
+    console.log("💣 Waiting for bomb placement, ignoring bomb exploded event")
   } else if (
     !manualControlManager.isManualMode() &&
     !gameContext.moveIntervalId &&
@@ -334,6 +338,8 @@ function handleChestDestroyedDuringPath(
     }
   } else if (pathModeManager.isEscaping()) {
     console.log("🏃 Escape in progress, ignoring chest destroyed event")
+  } else if (gameContext.waitingForBombPlacement) {
+    console.log("💣 Waiting for bomb placement, ignoring chest destroyed event")
   } else if (
     !manualControlManager.isManualMode() &&
     !gameContext.moveIntervalId &&

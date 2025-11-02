@@ -3,6 +3,7 @@ import socketManager from "./socket/SocketManager.js"
 import { decideNextAction } from "./bot/agent.js"
 import { STEP_DELAY, GRID_SIZE, DIRS } from "./utils/constants.js"
 import { inBounds, toGridCoords } from "./utils/gridUtils.js"
+import { findUnsafeTiles } from "./bot/pathfinding/dangerMap.js"
 
 // Import helpers
 import {
@@ -28,6 +29,7 @@ const gameContext = {
   myUid: null,
   moveIntervalId: null,
   alignIntervalId: null,
+  waitingForBombPlacement: false, // Track if waiting for bomb confirmation
   forceClearIntervals: () => {
     if (gameContext.moveIntervalId) {
       clearInterval(gameContext.moveIntervalId)
@@ -135,7 +137,7 @@ async function smoothMove(direction) {
     )
   ) {
     console.log(
-      `❌ BLOCKED: Cannot move ${direction} to [${nextGridX}, ${nextGridY}] - tile not walkable!`,
+      `❌ BLOCKED: Cannot move ${direction} to [${nextGridX}, ${nextGridY}] - tile not walkable!, ${gameContext.currentState.map[nextGridY][nextGridX]}`,
     )
 
     // Abort current path since next step is blocked
@@ -229,6 +231,55 @@ async function smoothMove(direction) {
       // Priority 1: Continue escape mode
       if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
         const nextMove = pathModeManager.getNextEscapeMove()
+
+        // CRITICAL SAFETY CHECK: Re-validate escape destination
+        // (Less strict than follow mode - we're already in danger, need to move)
+        const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+        if (!myBomber) {
+          console.log(`⚠️ Cannot validate escape - no bomber data`)
+          pathModeManager.completeEscape()
+          makeDecision()
+          return
+        }
+
+        const currentPos = toGridCoords(myBomber.x, myBomber.y)
+        let nextX = currentPos.x
+        let nextY = currentPos.y
+
+        if (nextMove === "UP") nextY--
+        else if (nextMove === "DOWN") nextY++
+        else if (nextMove === "LEFT") nextX--
+        else if (nextMove === "RIGHT") nextX++
+
+        // Only abort if next position has IMMINENT bomb (< 500ms)
+        const { bombs = [], bombers = [], map } = gameContext.currentState
+        const imminentBombs = bombs.filter((b) => {
+          const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
+          return timeLeft < 500 // Less than 0.5 second
+        })
+
+        if (imminentBombs.length > 0) {
+          const unsafeTiles = findUnsafeTiles(map, imminentBombs, bombers)
+          const nextPosKey = `${nextX},${nextY}`
+
+          if (unsafeTiles.has(nextPosKey)) {
+            console.log(
+              `⚠️ ESCAPE MODE DANGER: Next position [${nextX},${nextY}] has imminent bomb!`,
+            )
+            imminentBombs.forEach((b) => {
+              const bombPos = toGridCoords(b.x, b.y)
+              const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
+              console.log(
+                `   💣 Bomb at [${bombPos.x},${bombPos.y}] explodes in ${timeLeft.toFixed(0)}ms`,
+              )
+            })
+            console.log(`   🚨 Emergency re-evaluation...`)
+            pathModeManager.completeEscape()
+            makeDecision()
+            return
+          }
+        }
+
         console.log(
           `🏃 Continuing escape: ${nextMove} (${pathModeManager.getRemainingEscapeSteps()} steps remaining)`,
         )
@@ -240,6 +291,65 @@ async function smoothMove(direction) {
       // Priority 2: Continue follow mode (exploration/targeting paths)
       else if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
         const nextMove = pathModeManager.getNextFollowMove()
+
+        // CRITICAL SAFETY CHECK: Re-validate destination safety before continuing
+        // Calculate next position
+        const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+        if (!myBomber) {
+          console.log(`⚠️ Cannot validate safety - no bomber data`)
+          pathModeManager.completeFollow()
+          makeDecision()
+          return
+        }
+
+        const currentPos = toGridCoords(myBomber.x, myBomber.y)
+        let nextX = currentPos.x
+        let nextY = currentPos.y
+
+        if (nextMove === "UP") nextY--
+        else if (nextMove === "DOWN") nextY++
+        else if (nextMove === "LEFT") nextX--
+        else if (nextMove === "RIGHT") nextX++
+
+        // Check if next position is in blast zone of any active bomb
+        const { bombs = [], bombers = [], map } = gameContext.currentState
+
+        if (bombs.length > 0) {
+          const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+          const nextPosKey = `${nextX},${nextY}`
+
+          // DEBUG: Log bomb info for safety check
+          console.log(`   🔍 Safety check: Moving to [${nextX},${nextY}]`)
+          console.log(`      Active bombs: ${bombs.length}`)
+          bombs.forEach((b) => {
+            const bombPos = toGridCoords(b.x, b.y)
+            const owner = bombers.find((bomber) => bomber.uid === b.uid)
+            const range = owner ? owner.explosionRange : b.explosionRange || 2
+            const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
+            console.log(
+              `      💣 [${bombPos.x},${bombPos.y}] range=${range} (owner: ${owner ? "found" : "NOT FOUND"}) explodes in ${timeLeft.toFixed(0)}ms`,
+            )
+          })
+          console.log(`      Unsafe tiles count: ${unsafeTiles.size}`)
+
+          if (unsafeTiles.has(nextPosKey)) {
+            console.log(
+              `⚠️ FOLLOW MODE SAFETY ABORT: Next position [${nextX},${nextY}] is in blast zone!`,
+            )
+            bombs.forEach((b) => {
+              const bombPos = toGridCoords(b.x, b.y)
+              const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
+              console.log(
+                `   💣 Bomb at [${bombPos.x},${bombPos.y}] explodes in ${timeLeft.toFixed(0)}ms`,
+              )
+            })
+            console.log(`   🚫 Canceling follow mode - re-evaluating...`)
+            pathModeManager.completeFollow()
+            makeDecision()
+            return
+          }
+        }
+
         console.log(
           `🚶 Continuing follow path: ${nextMove} (${pathModeManager.getRemainingFollowSteps()} steps remaining)`,
         )
@@ -334,6 +444,9 @@ function makeDecision() {
     if (action === "BOMB") {
       placeBomb()
 
+      // CRITICAL: Set flag to prevent re-evaluation during bomb placement wait
+      gameContext.waitingForBombPlacement = true
+
       // CRITICAL: Wait for server to confirm bomb placement before escaping
       // Otherwise bot might move before bomb is placed, causing deadlock
       let escapeExecuted = false
@@ -342,6 +455,7 @@ function makeDecision() {
         if (!escapeExecuted) {
           console.log("⚠️  Bomb placement timeout - proceeding with escape anyway")
           escapeExecuted = true
+          gameContext.waitingForBombPlacement = false
           executeEscapeAfterBomb(
             pathModeManager,
             escapeAction,
@@ -359,6 +473,7 @@ function makeDecision() {
           clearTimeout(bombPlacementTimeout)
           console.log("✅ Bomb confirmed at current position - proceeding with escape")
           escapeExecuted = true
+          gameContext.waitingForBombPlacement = false
           executeEscapeAfterBomb(
             pathModeManager,
             escapeAction,

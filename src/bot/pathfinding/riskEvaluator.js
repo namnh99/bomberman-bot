@@ -113,8 +113,6 @@ function findNearestBomb(x, y, bombs) {
   let minDistance = Infinity
 
   for (const bomb of bombs) {
-    if (bomb.isExploded) continue
-
     const bx = Math.floor(bomb.x / 40)
     const by = Math.floor(bomb.y / 40)
     const distance = manhattanDistance(x, y, bx, by)

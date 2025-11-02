@@ -90,8 +90,6 @@ export function findMostThreateningEnemy(enemies, myBomber, myPos) {
  * Evaluate if we should fight or flee
  */
 export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
-  console.log(`\n🔍 shouldFightOrFlee() called - enemies: ${enemies.length}`)
-
   if (enemies.length === 0) {
     console.log(`   ℹ️ No enemies → NEUTRAL`)
     return "neutral"
