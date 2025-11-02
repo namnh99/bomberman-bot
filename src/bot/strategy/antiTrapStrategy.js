@@ -1,6 +1,7 @@
 import { DIRS, WALKABLE } from "../../utils/constants.js"
 import { inBounds, posKey } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap } from "../pathfinding/dangerMap.js"
+import { getBombWithGrid, getTimeUntilExplosion } from "../../utils/bombUtils.js"
 
 /**
  * Detect if bot is being trapped by enemy bombs
@@ -150,12 +151,11 @@ export function suggestEvasiveAction(trapInfo, myPos, map, bombs, bombers, myUid
       // Calculate time margin (how long until bombs explode)
       let minTimeMargin = Infinity
       for (const bomb of bombs) {
-        const bombX = Math.floor(bomb.x / 40)
-        const bombY = Math.floor(bomb.y / 40)
-        const dist = Math.abs(bombX - n.x) + Math.abs(bombY - n.y)
+        const { gridX, gridY } = getBombWithGrid(bomb)
+        const dist = Math.abs(gridX - n.x) + Math.abs(gridY - n.y)
 
         if (dist <= bomb.explosionRange) {
-          const timeRemaining = bomb.lifeTime - (Date.now() - bomb.createdAt)
+          const timeRemaining = getTimeUntilExplosion(bomb)
           minTimeMargin = Math.min(minTimeMargin, timeRemaining)
         }
       }

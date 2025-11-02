@@ -5,7 +5,8 @@ import {
   BOMB_EXPLOSION_TIME,
   STEP_DELAY,
 } from "../../utils/constants.js"
-import { inBounds, toGridCoords } from "../../utils/gridUtils.js"
+import { inBounds } from "../../utils/gridUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 
 /**
  * Check if a tile will be safe by the time we reach it (considering bomb timers)
@@ -60,10 +61,8 @@ export function isTileSafeByTime(
 
   // Check each bomb to see if it will explode before we reach this tile
   for (const bomb of bombs) {
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner ? owner.explosionRange : 2
-
-    const { x: gridBombX, y: gridBombY } = toGridCoords(bomb.x, bomb.y)
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    const range = getBombRange(bomb, allBombers)
 
     // Calculate when this bomb will explode using server's lifeTime
     const bombCreatedAt = bomb.createdAt || now
@@ -77,7 +76,7 @@ export function isTileSafeByTime(
     if (elapsedTime >= bombLifeTime) {
       if (stepsToReach <= 3) {
         console.log(
-          `         💣 Bomb [${gridBombX},${gridBombY}]: SKIPPED (already exploded: elapsed ${elapsedTime}ms >= life ${bombLifeTime}ms)`,
+          `         💣 Bomb [${gridX},${gridY}]: SKIPPED (already exploded: elapsed ${elapsedTime}ms >= life ${bombLifeTime}ms)`,
         )
       }
       continue // Skip this bomb - it should be gone
@@ -88,7 +87,7 @@ export function isTileSafeByTime(
     // DEBUG: Log timing calculations for first few tiles
     if (stepsToReach <= 3 && bombs.length > 0) {
       console.log(
-        `         💣 Bomb [${gridBombX},${gridBombY}]: created=${bombCreatedAt}, life=${bombLifeTime}ms, now=${now}`,
+        `         💣 Bomb [${gridX},${gridY}]: created=${bombCreatedAt}, life=${bombLifeTime}ms, now=${now}`,
       )
       console.log(
         `            Time until explosion: ${bombLifeTime}ms - (${now} - ${bombCreatedAt}) = ${timeUntilExplosion.toFixed(0)}ms`,
@@ -106,7 +105,7 @@ export function isTileSafeByTime(
     }
 
     // Check if tile IS the bomb location
-    if (x === gridBombX && y === gridBombY) {
+    if (x === gridX && y === gridY) {
       // Only allow crossing the bomb tile if we can pass BEFORE it explodes
       // EMERGENCY: Minimal buffer (600ms) - desperate situations
       // NORMAL: Balanced buffer (1000ms) - safe crossing with reasonable margin
@@ -118,7 +117,7 @@ export function isTileSafeByTime(
 
       if (stepsToReach <= 3 && bombs.length > 0) {
         console.log(
-          `         💣 Bomb at [${gridBombX},${gridBombY}] explodes in ${timeUntilExplosion.toFixed(0)}ms | Crossing tile needs ${timeToReach.toFixed(0)}ms + ${BOMB_TILE_BUFFER.toFixed(0)}ms buffer → ${canCrossSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
+          `         💣 Bomb at [${gridX},${gridY}] explodes in ${timeUntilExplosion.toFixed(0)}ms | Crossing tile needs ${timeToReach.toFixed(0)}ms + ${BOMB_TILE_BUFFER.toFixed(0)}ms buffer → ${canCrossSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
         )
       }
 
@@ -133,8 +132,8 @@ export function isTileSafeByTime(
     let isInBlastZone = false
     for (const [dx, dy] of DIRS) {
       for (let step = 1; step <= range; step++) {
-        const nx = gridBombX + dx * step
-        const ny = gridBombY + dy * step
+        const nx = gridX + dx * step
+        const ny = gridY + dy * step
 
         if (!inBounds(nx, ny)) break
         if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
@@ -165,7 +164,7 @@ export function isTileSafeByTime(
 
       if (stepsToReach <= 3 && bombs.length > 0) {
         console.log(
-          `         💥 Tile in blast zone of [${gridBombX},${gridBombY}] | Need ${timeToReach.toFixed(0)}ms + ${SAFETY_BUFFER.toFixed(0)}ms buffer vs ${timeUntilExplosion.toFixed(0)}ms available → ${canPassSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
+          `         💥 Tile in blast zone of [${gridX},${gridY}] | Need ${timeToReach.toFixed(0)}ms + ${SAFETY_BUFFER.toFixed(0)}ms buffer vs ${timeUntilExplosion.toFixed(0)}ms available → ${canPassSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
         )
       }
 
@@ -202,9 +201,8 @@ export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, cu
   let minTimeMargin = Infinity
 
   for (const bomb of bombs) {
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner ? owner.explosionRange : 2
-    const { x: gridBombX, y: gridBombY } = toGridCoords(bomb.x, bomb.y)
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    const range = getBombRange(bomb, allBombers)
 
     const bombCreatedAt = bomb.createdAt || now
     const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
@@ -213,14 +211,14 @@ export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, cu
     // Check if tile is bomb location or in blast zone
     let affectedByBomb = false
 
-    if (x === gridBombX && y === gridBombY) {
+    if (x === gridX && y === gridY) {
       affectedByBomb = true
     } else {
       // Check explosion range
       for (const [dx, dy] of DIRS) {
         for (let step = 1; step <= range; step++) {
-          const nx = gridBombX + dx * step
-          const ny = gridBombY + dy * step
+          const nx = gridX + dx * step
+          const ny = gridY + dy * step
 
           if (!inBounds(nx, ny)) break
           if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break

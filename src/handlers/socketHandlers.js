@@ -1,5 +1,6 @@
-import { toGridCoords } from "../utils/gridUtils.js"
 import { GRID_SIZE, ITEMS } from "../utils/constants.js"
+import { toGridCoords } from "../utils/gridUtils.js"
+import { getBombWithGrid } from "../utils/bombUtils.js"
 import { findUnsafeTiles } from "../bot/agent.js"
 import {
   updateBomberPosition,
@@ -88,16 +89,16 @@ export function registerSocketHandlers(
     console.log(`   Full bomb object:`, JSON.stringify(bomb, null, 2))
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-    const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
+    const { gridX, gridY } = getBombWithGrid(bomb)
 
     // Check if Bot is standing on the bomb tile when it's placed
     // ONLY set walkable if Bot is on the bomb tile
     let botOnTheBomb = false
-    if (myBomber) botOnTheBomb = isBomberOnBombTile(myBomber, bombX, bombY)
+    if (myBomber) botOnTheBomb = isBomberOnBombTile(myBomber, gridX, gridY)
     bomb.walkable = botOnTheBomb
 
     if (!bombTracker.has(bomb.id) && botOnTheBomb) {
-      bombTracker.add(bomb.id, bombX, bombY, bomb.uid)
+      bombTracker.add(bomb.id, gridX, gridY, bomb.uid)
     }
     addBomb(gameContext.currentState, bomb)
 

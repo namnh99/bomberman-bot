@@ -1,8 +1,7 @@
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
-import { toGridCoords } from "../../utils/gridUtils.js"
-import { GRID_SIZE } from "../../utils/constants.js"
-import { createFutureBomb } from "../helpers/index.js"
+import { DIRS, GRID_SIZE } from "../../utils/constants.js"
+import { createFutureBomb, getBombWithGrid } from "../../utils/bombUtils.js"
 
 /**
  * Validate if bombing is safe by checking escape routes BEFORE committing
@@ -13,8 +12,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
 
   // Check if bomb already exists at this position
   const bombAlreadyHere = bombs.some((bomb) => {
-    const { x, y } = toGridCoords(bomb.x, bomb.y)
-    return x === bx && y === by
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    return gridX === bx && gridY === by
   })
 
   if (bombAlreadyHere) {
@@ -40,8 +39,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // Find escape path from bomb position
-  // CRITICAL: Use STRICT mode - must NOT cross blast zones (no timing-based)
-  // This is a FUTURE bomb we're about to place, so we need GUARANTEED escape
+  // CRITICAL: Allow timing-based crossing for escape (we just placed bomb, need to move fast!)
+  // This allows "wave surfing" - crossing blast zones if timing is safe
   const player = { x: bx, y: by }
   const escapePath = findBestPath(
     map,
@@ -51,7 +50,7 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     bombers,
     myUid,
     true, // isEscape mode
-    false, // allowTimingBasedCrossing = FALSE (strictly safe!)
+    true, // allowTimingBasedCrossing = TRUE (allow wave surfing!)
   )
 
   if (!escapePath || escapePath.path.length === 0) {
@@ -156,7 +155,7 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     bombers,
     myUid,
     true, // isEscape mode
-    false, // allowTimingBasedCrossing = FALSE (strictly safe for future bomb!)
+    true, // allowTimingBasedCrossing = TRUE (consistent with primary escape)
   )
 
   if (!secondEscapePath || secondEscapePath.path.length === 0) {

@@ -8,7 +8,8 @@ import {
   OSCILLATION_THRESHOLD,
   BOMB_EXPLOSION_TIME,
 } from "../utils/constants.js"
-import { toGridCoords, posKey, isAdjacent, inBounds } from "../utils/gridUtils.js"
+import { posKey, isAdjacent, inBounds, toGridCoords } from "../utils/gridUtils.js"
+import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
 import { findSafeWaitingPosition } from "./strategy/stagedEscape.js"
@@ -33,7 +34,7 @@ import {
   compareSingleVsMultiTarget,
 } from "./strategy/index.js"
 import { findAdvancedEscapePath } from "./strategy/advancedEscape.js"
-import { createFutureBomb } from "./helpers/index.js"
+import { createFutureBomb } from "../utils/bombUtils.js"
 
 // Anti-oscillation: Track last position and decision
 let lastPosition = null
@@ -162,8 +163,8 @@ function applyBacktrackGuard(action, player, map, bombs, bombers) {
 
     // ensure no active bomb occupying the tile (unless walkable bomb flag true)
     const hasBomb = bombs.some((b) => {
-      const { x, y } = toGridCoords(b.x, b.y)
-      return x === nx && y === ny && !b.walkable
+      const { gridX, gridY } = getBombWithGrid(b)
+      return gridX === nx && gridY === ny && !b.walkable
     })
     if (hasBomb) continue
 
@@ -304,9 +305,9 @@ function handleTarget(result, state, myUid) {
           `   ⚠️ SAFETY OVERRIDE: Destination [${destX},${destY}] is in blast zone of imminent bomb!`,
         )
         imminentBombs.forEach((b) => {
-          const { x: bx, y: by } = toGridCoords(b.x, b.y)
-          const timeLeft = Math.max(0, b.lifeTime - (Date.now() - b.createdAt))
-          console.log(`      💣 Bomb at [${bx},${by}] explodes in ${timeLeft.toFixed(0)}ms`)
+          const { gridX, gridY } = getBombWithGrid(b)
+          const timeLeft = getTimeUntilExplosion(b)
+          console.log(`      💣 Bomb at [${gridX},${gridY}] explodes in ${timeLeft.toFixed(0)}ms`)
         })
         console.log(`   🚫 REFUSING dangerous move - will explore instead`)
         console.log("=".repeat(60) + "\n")
@@ -347,8 +348,8 @@ function handleTarget(result, state, myUid) {
 
         if (inBounds(nx, ny) && WALKABLE.includes(map[ny][nx])) {
           const hasBomb = bombs.some((b) => {
-            const { x, y } = toGridCoords(b.x, b.y)
-            return x === nx && y === ny && !b.walkable
+            const { gridX, gridY } = getBombWithGrid(b)
+            return gridX === nx && gridY === ny && !b.walkable
           })
 
           if (!hasBomb) {
@@ -542,8 +543,10 @@ export function decideNextAction(state, myUid) {
   if (bombs.length > 0) {
     console.log("   Bomb positions:")
     bombs.forEach((b, i) => {
-      const { x, y } = toGridCoords(b.x, b.y)
-      console.log(`   Bomb ${i + 1}: [${x}, ${y}] | owner: ${b.uid === myUid ? "ME" : b.uid}`)
+      const { gridX, gridY } = getBombWithGrid(b)
+      console.log(
+        `   Bomb ${i + 1}: [${gridX}, ${gridY}] | owner: ${b.uid === myUid ? "ME" : b.uid}`,
+      )
     })
   }
   console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
@@ -791,8 +794,8 @@ export function decideNextAction(state, myUid) {
           const ty = enemy.y + ady
           if (map[ty] && WALKABLE.includes(map[ty][tx])) {
             const hasBomb = bombs.some((b) => {
-              const { x, y } = toGridCoords(b.x, b.y)
-              return x === tx && y === ty
+              const { gridX, gridY } = getBombWithGrid(b)
+              return gridX === tx && gridY === ty
             })
             if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
           }
@@ -893,12 +896,11 @@ export function decideNextAction(state, myUid) {
     let timeUntilDanger = Infinity
     if (isInBlastZone) {
       for (const bomb of bombs) {
-        const bombX = Math.floor(bomb.x / GRID_SIZE)
-        const bombY = Math.floor(bomb.y / GRID_SIZE)
-        const distance = Math.abs(item.x - bombX) + Math.abs(item.y - bombY)
+        const { gridX, gridY } = getBombWithGrid(bomb)
+        const distance = Math.abs(item.x - gridX) + Math.abs(item.y - gridY)
 
         if (distance <= bomb.explosionRange) {
-          const bombTimeRemaining = bomb.lifeTime - (Date.now() - bomb.createdAt)
+          const bombTimeRemaining = getTimeUntilExplosion(bomb)
           timeUntilDanger = Math.min(timeUntilDanger, bombTimeRemaining)
         }
       }
@@ -1040,8 +1042,8 @@ export function decideNextAction(state, myUid) {
         console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
 
         const bombAlreadyHere = bombs.some((bomb) => {
-          const { x, y } = toGridCoords(bomb.x, bomb.y)
-          return x === player.x && y === player.y
+          const { gridX, gridY } = getBombWithGrid(bomb)
+          return gridX === player.x && gridY === player.y
         })
 
         if (bombAlreadyHere) {
@@ -1087,8 +1089,8 @@ export function decideNextAction(state, myUid) {
 
               // Check proximity - only bombs within ~6 tiles are relevant
               // (max explosion range is usually 5, plus 1 safety margin)
-              const { x: bombX, y: bombY } = toGridCoords(b.x, b.y)
-              const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+              const { gridX, gridY } = getBombWithGrid(b)
+              const distance = Math.abs(gridX - player.x) + Math.abs(gridY - player.y)
               const DANGER_PROXIMITY = 6 // Only consider bombs within 6 tiles
 
               return distance <= DANGER_PROXIMITY
@@ -1099,13 +1101,11 @@ export function decideNextAction(state, myUid) {
                 `   ⚠️ ${dangerousBombs.length} NEARBY bomb(s) about to explode - TOO RISKY to place another bomb!`,
               )
               dangerousBombs.forEach((b) => {
-                const { x, y } = toGridCoords(b.x, b.y)
-                const bombCreatedAt = b.createdAt || now
-                const bombLifeTime = b.lifeTime || BOMB_EXPLOSION_TIME
-                const timeLeft = bombLifeTime - (now - bombCreatedAt)
-                const distance = Math.abs(x - player.x) + Math.abs(y - player.y)
+                const { gridX, gridY } = getBombWithGrid(b)
+                const timeLeft = getTimeUntilExplosion(b)
+                const distance = Math.abs(gridX - player.x) + Math.abs(gridY - player.y)
                 console.log(
-                  `      💣 Bomb at [${x}, ${y}] explodes in ${timeLeft.toFixed(0)}ms (${distance} tiles away)`,
+                  `      💣 Bomb at [${gridX}, ${gridY}] explodes in ${timeLeft.toFixed(0)}ms (${distance} tiles away)`,
                 )
               })
               console.log("   🎯 Skipping bomb placement - will focus on staying safe")
@@ -1187,8 +1187,8 @@ export function decideNextAction(state, myUid) {
 
         if (map[adjY] && WALKABLE.includes(map[adjY][adjX])) {
           const hasBomb = bombs.some((b) => {
-            const { x, y } = toGridCoords(b.x, b.y)
-            return x === adjX && y === adjY
+            const { gridX, gridY } = getBombWithGrid(b)
+            return gridX === adjX && gridY === adjY
           })
 
           if (hasBomb) {
@@ -1450,8 +1450,8 @@ export function decideNextAction(state, myUid) {
           const ty = enemy.y + ady
           if (map[ty] && WALKABLE.includes(map[ty][tx])) {
             const hasBomb = bombs.some((b) => {
-              const { x, y } = toGridCoords(b.x, b.y)
-              return x === tx && y === ty
+              const { gridX, gridY } = getBombWithGrid(b)
+              return gridX === tx && gridY === ty
             })
             if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
           }
@@ -1659,8 +1659,8 @@ export function decideNextAction(state, myUid) {
         if (inBounds(nx, ny) && WALKABLE.includes(map[ny][nx])) {
           // Check if there's no bomb at this tile
           const hasBomb = bombs.some((b) => {
-            const { x, y } = toGridCoords(b.x, b.y)
-            return x === nx && y === ny
+            const { gridX, gridY } = getBombWithGrid(b)
+            return gridX === nx && gridY === ny
           })
 
           if (!hasBomb) {
@@ -1729,39 +1729,25 @@ export function decideNextAction(state, myUid) {
 
       // Only bomb if we can destroy obstacles and escape safely
       if (obstaclesInRange.length > 0) {
-        const futureBombs = [
-          ...bombs,
-          createFutureBomb(player.x, player.y, myBomber.explosionRange, myBomber.uid),
-        ]
-        const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+        // CRITICAL: Use full validation to prevent self-trap scenarios
+        const validation = validateBombSafety(player, map, bombs, bombers, myBomber, myUid)
 
-        if (futureSafeTiles.length > 0) {
-          const escapePath = findBestPath(
-            map,
-            player,
-            futureSafeTiles,
-            futureBombs,
-            bombers,
-            myUid,
-            true,
-          )
-
-          if (escapePath && escapePath.path.length > 0) {
-            console.log(`   ✅ Can bomb obstacles and escape!`)
-            console.log(`🎯 DECISION: BOMB (Break Out) + ESCAPE`)
-            console.log("=".repeat(90) + "\n")
-            return {
-              action: "BOMB",
-              isEscape: true,
-              escapeAction: escapePath.path[0],
-              fullPath: escapePath.path,
-              fullPathCoordinates: escapePath.fullPathCoordinates || [],
-            }
-          } else {
-            console.log(`   ⚠️ No escape path after bombing obstacles`)
+        if (validation.canBomb) {
+          console.log(`   ✅ Can bomb obstacles and escape safely!`)
+          console.log(`🎯 DECISION: BOMB (Break Out) + ESCAPE`)
+          console.log("=".repeat(90) + "\n")
+          return {
+            action: "BOMB",
+            isEscape: true,
+            escapeAction: validation.escapeAction,
+            fullPath: validation.escapePath,
+            fullPathCoordinates: validation.escapeCoordinates || [],
           }
         } else {
-          console.log(`   ⚠️ No safe tiles after bombing`)
+          console.log(`   ⚠️ Cannot bomb safely: ${validation.reason}`)
+          if (validation.reason === "escape_trapped") {
+            console.log(`      🚫 Bombing would create deadlock - REFUSING TO BOMB`)
+          }
         }
       }
     } else {

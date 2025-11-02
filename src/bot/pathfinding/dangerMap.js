@@ -1,5 +1,6 @@
 import { DIRS, BLOCKABLE_EXPLOSION, BREAKABLE, MAP_SIZE, ITEMS } from "../../utils/constants.js"
-import { inBounds, posKey, toGridCoords } from "../../utils/gridUtils.js"
+import { inBounds, posKey } from "../../utils/gridUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 
 /**
  * Get all coordinates currently in an explosion radius (static danger map)
@@ -12,18 +13,15 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
   const unsafeCoords = new Set()
 
   for (const bomb of bombs) {
-    // Try to get range from bomber owner first, fallback to bomb object
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner ? owner.explosionRange : 2
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    const range = getBombRange(bomb, allBombers)
 
-    const { x: gridBombX, y: gridBombY } = toGridCoords(bomb.x, bomb.y)
-
-    unsafeCoords.add(posKey(gridBombX, gridBombY))
+    unsafeCoords.add(posKey(gridX, gridY))
 
     for (const [dx, dy] of DIRS) {
       for (let step = 1; step <= range; step++) {
-        const nx = gridBombX + dx * step
-        const ny = gridBombY + dy * step
+        const nx = gridX + dx * step
+        const ny = gridY + dy * step
 
         if (!inBounds(nx, ny)) break
         if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
@@ -66,8 +64,8 @@ export function findSafeTiles(map, bombs = [], allBombers = []) {
 export function createBombTileMap(bombs) {
   const bombTiles = new Map()
   bombs.forEach((b) => {
-    const { x, y } = toGridCoords(b.x, b.y)
-    bombTiles.set(posKey(x, y), b)
+    const { gridX, gridY } = getBombWithGrid(b)
+    bombTiles.set(posKey(gridX, gridY), b)
   })
 
   return bombTiles

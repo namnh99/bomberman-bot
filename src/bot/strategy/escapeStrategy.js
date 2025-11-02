@@ -1,5 +1,6 @@
 import { DIRS } from "../../utils/constants.js"
-import { toGridCoords, posKey, isWalkable } from "../../utils/gridUtils.js"
+import { posKey, isWalkable } from "../../utils/gridUtils.js"
+import { getBombWithGrid } from "../../utils/bombUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath, findShortestEscapePath } from "../pathfinding/pathFinder.js"
 import { wouldMoveTrapUs } from "../pathfinding/riskEvaluator.js"
@@ -314,8 +315,8 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
     // Calculate minimum distance to any bomb
     let minDistToBomb = Infinity
     for (const bomb of bombs) {
-      const { x: bx, y: by } = toGridCoords(bomb.x, bomb.y)
-      const dist = Math.abs(nx - bx) + Math.abs(ny - by)
+      const { gridX, gridY } = getBombWithGrid(bomb)
+      const dist = Math.abs(nx - gridX) + Math.abs(ny - gridY)
       minDistToBomb = Math.min(minDistToBomb, dist)
     }
     bombDistances.set(dir, minDistToBomb)
@@ -332,8 +333,8 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
     const key = posKey(nx, ny)
     const isBombTile = bombs.some((bomb) => {
-      const { x, y } = toGridCoords(bomb.x, bomb.y)
-      return x === nx && y === ny
+      const { gridX, gridY } = getBombWithGrid(bomb)
+      return gridX === nx && gridY === ny
     })
 
     // CRITICAL: Use EMERGENCY MODE (minimal buffers) for desperate situations
@@ -383,8 +384,8 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
 
     const key = posKey(nx, ny)
     const isBombTile = bombs.some((bomb) => {
-      const { x, y } = toGridCoords(bomb.x, bomb.y)
-      return x === nx && y === ny
+      const { gridX, gridY } = getBombWithGrid(bomb)
+      return gridX === nx && gridY === ny
     })
 
     if (!unsafeTiles.has(key) && !isBombTile) {
@@ -415,8 +416,8 @@ export function attemptEmergencyEscape(map, player, bombs, bombers, myBomber) {
     if (!isWalkable(nx, ny, map)) continue
 
     const isBombTile = bombs.some((bomb) => {
-      const { x, y } = toGridCoords(bomb.x, bomb.y)
-      return x === nx && y === ny
+      const { gridX, gridY } = getBombWithGrid(bomb)
+      return gridX === nx && gridY === ny
     })
 
     if (!isBombTile) {
@@ -491,29 +492,28 @@ export function checkSafety(map, player, bombs, bombers, myBomber) {
     : true
 
   // CRITICAL: Check if there are nearby bombs about to explode soon (urgency check)
-  // IMPORTANT: Only treat as urgent if player is ACTUALLY in blast zone OR very close to bomb
   const now = Date.now()
   const URGENCY_THRESHOLD = 3000 // 3 seconds
-  const URGENCY_PROXIMITY = 2 // Only urgent if bomb is 2 or fewer tiles away (within potential blast range)
 
   let hasUrgentThreat = false
   if (bombs.length > 0) {
     for (const bomb of bombs) {
-      const { x: bombX, y: bombY } = toGridCoords(bomb.x, bomb.y)
-      const distance = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+      const { gridX, gridY } = getBombWithGrid(bomb)
+      const distance = Math.abs(gridX - player.x) + Math.abs(gridY - player.y)
 
-      // CRITICAL: Check if player is IN BLAST ZONE of this bomb first
-      const isInBlastZone = unsafeTiles.has(posKey(player.x, player.y))
+      // CRITICAL: Check if player is IN BLAST ZONE of this bomb
+      const playerPosKey = posKey(player.x, player.y)
+      const isInBlastZone = unsafeTiles.has(playerPosKey)
 
-      // Check if bomb is nearby AND either in blast zone OR VERY close (adjacent)
-      if ((isInBlastZone && distance <= URGENCY_PROXIMITY) || distance <= 1) {
+      // If player is in blast zone, it's ALWAYS urgent (regardless of distance)
+      if (isInBlastZone) {
         const bombCreatedAt = bomb.createdAt || now
         const bombLifeTime = bomb.lifeTime || 5000
         const timeUntilExplosion = bombLifeTime - (now - bombCreatedAt)
 
         if (timeUntilExplosion > 0 && timeUntilExplosion <= URGENCY_THRESHOLD) {
           console.log(
-            `   ⚠️ URGENT: Bomb at [${bombX},${bombY}] exploding in ${(timeUntilExplosion / 1000).toFixed(1)}s (${distance} tiles away${isInBlastZone ? ", IN BLAST ZONE" : ""})`,
+            `   ⚠️ URGENT: Bomb at [${gridX},${gridY}] exploding in ${(timeUntilExplosion / 1000).toFixed(1)}s (${distance} tiles away, IN BLAST ZONE)`,
           )
           hasUrgentThreat = true
           break

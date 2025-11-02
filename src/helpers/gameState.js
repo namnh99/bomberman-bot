@@ -1,4 +1,5 @@
 import { toGridCoords } from "../utils/gridUtils.js"
+import { getBombWithGrid } from "../utils/bombUtils.js"
 import { WALKABLE } from "../utils/constants.js"
 
 /**
@@ -53,8 +54,8 @@ export function isWalkable(map, x, y, bombs, myUid) {
 
   // Check if there's a bomb at this position
   const bomb = bombs.find((b) => {
-    const { x: bombX, y: bombY } = toGridCoords(b.x, b.y)
-    return bombX === x && bombY === y
+    const { gridX, gridY } = getBombWithGrid(b)
+    return gridX === x && gridY === y
   })
 
   // If there's a bomb, check if it's walkable

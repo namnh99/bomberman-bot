@@ -1,5 +1,6 @@
 import { DIRS, BLOCKABLE_EXPLOSION, BOMB_EXPLOSION_TIME } from "../../utils/constants.js"
-import { toGridCoords, inBounds, posKey } from "../../utils/gridUtils.js"
+import { inBounds, posKey } from "../../utils/gridUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 
 /**
  * Calculate when each tile will become dangerous and when it becomes safe again
@@ -10,9 +11,8 @@ export function calculateDangerTimeline(bombs, allBombers, map) {
   const now = Date.now()
 
   for (const bomb of bombs) {
-    const owner = allBombers.find((b) => b.uid === bomb.uid)
-    const range = owner?.explosionRange || 2
-    const { x: bx, y: by } = toGridCoords(bomb.x, bomb.y)
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    const range = getBombRange(bomb, allBombers)
 
     const bombCreatedAt = bomb.createdAt || now
     const bombLifeTime = bomb.lifeTime || BOMB_EXPLOSION_TIME
@@ -20,7 +20,7 @@ export function calculateDangerTimeline(bombs, allBombers, map) {
     const dangerEndTime = explosionTime + 500 // Explosion lasts 500ms
 
     // Mark bomb tile and explosion range
-    const affectedTiles = getExplosionPath(bx, by, range, map)
+    const affectedTiles = getExplosionPath(gridX, gridY, range, map)
 
     for (const tile of affectedTiles) {
       const key = posKey(tile.x, tile.y)
@@ -30,7 +30,7 @@ export function calculateDangerTimeline(bombs, allBombers, map) {
         timeline.set(key, {
           dangerStart: explosionTime,
           dangerEnd: dangerEndTime,
-          bombPos: { x: bx, y: by },
+          bombPos: { x: gridX, y: gridY },
         })
       }
     }

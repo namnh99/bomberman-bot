@@ -1,5 +1,6 @@
 import { DIRS, ITEMS } from "../../utils/constants.js"
-import { toGridCoords, posKey, inBounds } from "../../utils/gridUtils.js"
+import { posKey, inBounds } from "../../utils/gridUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 
 /**
  * Calculate the value of chain reactions from a bomb placement
@@ -36,19 +37,18 @@ export function calculateChainReactionValue(bombX, bombY, map, bombs, allBombers
       if (!bomb.isNew) continue // Only check for our initial bomb triggering others
 
       for (const existingBomb of bombs) {
-        const { x: bx, y: by } = toGridCoords(existingBomb.x, existingBomb.y)
+        const { gridX, gridY } = getBombWithGrid(existingBomb)
 
-        if (triggered.has(posKey(bx, by))) continue // Already triggered
+        if (triggered.has(posKey(gridX, gridY))) continue // Already triggered
 
-        if (tile.x === bx && tile.y === by) {
+        if (tile.x === gridX && tile.y === gridY) {
           // This bomb will be triggered!
-          const bomber = allBombers.find((b) => b.uid === existingBomb.uid)
-          const range = (bomber && bomber.explosionRange) || existingBomb.explosionRange || 1
+          const range = getBombRange(existingBomb, allBombers)
 
-          triggered.add(posKey(bx, by))
+          triggered.add(posKey(gridX, gridY))
           bombQueue.push({
-            x: bx,
-            y: by,
+            x: gridX,
+            y: gridY,
             range,
             uid: existingBomb.uid,
             isNew: false,

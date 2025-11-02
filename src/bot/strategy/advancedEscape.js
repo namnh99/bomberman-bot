@@ -2,6 +2,7 @@ import { findSafeTiles } from "../pathfinding/dangerMap.js"
 import { calculateDangerTimeline, findSafestTimedPath } from "../pathfinding/timingAnalyzer.js"
 import { manhattanDistance, posKey } from "../../utils/gridUtils.js"
 import { findBestPath } from "../pathfinding/index.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 
 /**
  * Advanced escape strategy for multi-bomb scenarios
@@ -199,16 +200,13 @@ function findChainSafePosition(player, chains, bombs, map, allBombers, myBomber)
       ]
 
       for (const bomb of allChainBombs) {
-        const owner = allBombers.find((b) => b.uid === bomb.uid)
-        const range = owner?.explosionRange || 2
-
-        const bx = Math.floor(bomb.x / 40)
-        const by = Math.floor(bomb.y / 40)
+        const { gridX, gridY } = getBombWithGrid(bomb)
+        const range = getBombRange(bomb, allBombers)
 
         // Check if tile is in this bomb's range
         if (
-          (tile.x === bx && Math.abs(tile.y - by) <= range) ||
-          (tile.y === by && Math.abs(tile.x - bx) <= range)
+          (tile.x === gridX && Math.abs(tile.y - gridY) <= range) ||
+          (tile.y === gridY && Math.abs(tile.x - gridX) <= range)
         ) {
           return false
         }
