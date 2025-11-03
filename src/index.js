@@ -191,10 +191,7 @@ async function smoothMove(direction) {
           pathModeManager.abortFollow("Path blocked")
         }
 
-        // Re-evaluate immediately
-        setTimeout(() => {
-          makeDecision()
-        }, STEP_DELAY)
+        makeDecision()
         return
       }
     } else {
@@ -417,7 +414,7 @@ function makeDecision() {
   console.log(
     `\n📍 Position: [${Math.floor(myBomber.x / GRID_SIZE)}, ${Math.floor(
       myBomber.y / GRID_SIZE,
-    )}] | Pixel: [${myBomber.x}, ${myBomber.y}] | Orient: ${myBomber.orient}`,
+    )}] | Pixel: [${myBomber.x}, ${myBomber.y}]`,
   )
 
   try {

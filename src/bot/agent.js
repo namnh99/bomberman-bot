@@ -1199,12 +1199,14 @@ export function decideNextAction(state, myUid) {
                     console.log("   🏃 Escape action:", escapePath.path[0])
                     console.log("=".repeat(90) + "\n")
 
+                    console.log(escapePath.path)
+
                     return {
                       action: "BOMB",
                       isEscape: true,
                       escapeAction: escapePath.path[0],
                       fullPath: escapePath.path,
-                      fullPathCoordinates: escapePath.fullPathCoordinates || [],
+                      fullPathCoordinates: escapePath.fullPathCoordinates,
                     }
                   } else {
                     console.log(`   ❌ No escape path found after bombing`)
