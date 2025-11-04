@@ -69,9 +69,6 @@ src/
 ├── utils/
 └── handlers/
 
-tests/
-└── waveSurfing.test.js          ← NEW! Wave Surfing test suite
-
 WAVE_SURFING.md                  ← NEW! Technical documentation
 WAVE_SURFING_VISUAL.md           ← NEW! Visual guide
 ```

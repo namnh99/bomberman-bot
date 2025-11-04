@@ -9,7 +9,7 @@ import {
 } from "../utils/constants.js"
 import { posKey, isAdjacent, inBounds, toGridCoords, toBombGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
-import { findBestPath, findSafePath } from "./pathfinding/index.js"
+import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
 import { findEscapeAction, checkSafety } from "./strategy/unifiedEscape.js"
 import {
