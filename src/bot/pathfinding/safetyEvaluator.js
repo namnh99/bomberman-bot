@@ -179,6 +179,52 @@ export function isTileSafeByTime(
 }
 
 /**
+ * Check if a path will be safe by the time we reach it (considering bomb timers)
+ * @param {Array} pathCoordinates - Array of path coordinates [{x, y}, ...]
+ * @param {Array} bombs - Array of active bombs
+ * @param {Array} bombers - Array of all bombers
+ * @param {Object} map - Game map
+ * @param {number} currentSpeed - Current movement speed (pixels per tick)
+ * @param {string} pathType - Type of path for logging ("FOLLOW" or "ESCAPE")
+ * @returns {boolean} - True if path will be safe when we reach it
+ */
+export function isPathSafeByTime(
+  pathCoordinates,
+  bombs,
+  bombers,
+  map,
+  currentSpeed,
+  pathType = "PATH",
+) {
+  // Check EVERY step in path with timing validation
+  // No need for unsafeTiles pre-check - isTileSafeByTime already checks blast zones efficiently
+  for (let i = 0; i < pathCoordinates.length; i++) {
+    const coord = pathCoordinates[i]
+    const stepNumber = i + 1
+
+    // CRITICAL: Validate timing - can we pass through this tile safely?
+    const isSafeByTiming = isTileSafeByTime(
+      coord.x,
+      coord.y,
+      stepNumber,
+      bombs,
+      bombers,
+      map,
+      currentSpeed,
+    )
+
+    if (!isSafeByTiming) {
+      console.log(
+        `   ❌ ${pathType} Step ${stepNumber} at [${coord.x},${coord.y}] crosses bomb zone - TIMING UNSAFE!`,
+      )
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
  * Calculate the minimum safe time margin for a tile
  * (how much extra time we have before nearest bomb explodes)
  * Higher value = safer tile, prioritize this direction

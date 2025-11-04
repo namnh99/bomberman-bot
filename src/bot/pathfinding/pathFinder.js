@@ -1,4 +1,4 @@
-import { GRID_SIZE, DIRS, WALKABLE, BREAKABLE, STEP_DELAY } from "../../utils/constants.js"
+import { DIRS, WALKABLE, BREAKABLE } from "../../utils/constants.js"
 import { inBounds, posKey } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap, findSafeTiles } from "./dangerMap.js"
 import { isTileSafeByTime } from "./safetyEvaluator.js"
