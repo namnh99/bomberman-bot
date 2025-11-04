@@ -230,9 +230,8 @@ function handleNewBombDuringPath(
       )
 
       // Validate timing for entire follow path
-      const isSafe = validatePathTiming(
+      const isSafe = isPathSafeByTime(
         followCoordinates,
-        unsafeTiles,
         gameContext.currentState.bombs,
         gameContext.currentState.bombers,
         gameContext.currentState.map,
@@ -257,14 +256,7 @@ function handleNewBombDuringPath(
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    // Only re-evaluate if this is NOT our own bomb (we already have an escape plan)
-    const isOurBomb = bomb.uid === gameContext.myUid
-    if (!isOurBomb) {
-      console.log("🔔 Enemy bomb detected, re-evaluating...")
-      onMakeDecision()
-    } else {
-      console.log("💣 Our bomb placed, waiting for escape sequence to start...")
-    }
+    onMakeDecision()
   }
 }
 

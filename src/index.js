@@ -125,19 +125,20 @@ async function smoothMove(direction) {
   const targetPixelX = nextGridX * GRID_SIZE + offset
   const targetPixelY = nextGridY * GRID_SIZE + offset
 
-  // CRITICAL: Validate target tile is walkable before attempting to move
-  if (
-    !inBounds(nextGridX, nextGridY) ||
-    !isWalkable(
-      gameContext.currentState.map,
-      nextGridX,
-      nextGridY,
-      gameContext.currentState.bombs,
-      gameContext.myUid,
-    )
-  ) {
+  const isTargetWalkable = isWalkable(
+    gameContext.currentState.map,
+    nextGridX,
+    nextGridY,
+    gameContext.currentState.bombs,
+    gameContext.myUid,
+  )
+
+  if (!inBounds(nextGridX, nextGridY) || !isTargetWalkable) {
     console.log(
-      `❌ BLOCKED: Cannot move ${direction} to [${nextGridX}, ${nextGridY}] - tile not walkable!, ${gameContext.currentState.map[nextGridY][nextGridX]}`,
+      `❌ BLOCKED: Cannot move ${direction} to [${nextGridX}, ${nextGridY}] - tile not walkable!`,
+    )
+    console.log(
+      `   Tile value: ${gameContext.currentState.map[nextGridY]?.[nextGridX]} | In bounds: ${inBounds(nextGridX, nextGridY)} | Walkable: ${isTargetWalkable}`,
     )
 
     // Abort current path since next step is blocked
@@ -148,10 +149,8 @@ async function smoothMove(direction) {
       pathModeManager.abortFollow("Next tile blocked")
     }
 
-    // Re-evaluate immediately
-    setTimeout(() => {
-      makeDecision()
-    }, STEP_DELAY)
+    gameContext.forceClearIntervals()
+    makeDecision()
     return
   }
 
@@ -181,8 +180,8 @@ async function smoothMove(direction) {
         console.log(
           `   ❌ ALIGNMENT ISSUE: Bot not on grid (X%40=${currentPixelX % GRID_SIZE}, Y%40=${currentPixelY % GRID_SIZE})`,
         )
-        gameContext.forceClearIntervals()
 
+        gameContext.forceClearIntervals()
         // Abort current path and re-evaluate
         if (pathModeManager.isEscaping()) {
           pathModeManager.abortEscape("Path blocked")
@@ -192,6 +191,7 @@ async function smoothMove(direction) {
         }
 
         makeDecision()
+        stuckCounter = 0
         return
       }
     } else {

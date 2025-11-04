@@ -1,7 +1,8 @@
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
-import { DIRS, GRID_SIZE } from "../../utils/constants.js"
+import { GRID_SIZE } from "../../utils/constants.js"
 import { createFutureBomb, getBombWithGrid } from "../../utils/bombUtils.js"
+import { toGridCoords } from "../../utils/gridUtils.js"
 
 /**
  * Validate if bombing is safe by checking escape routes BEFORE committing
@@ -38,10 +39,13 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     }
   }
 
-  // Find escape path from bomb position
-  // CRITICAL: Allow timing-based crossing for escape (we just placed bomb, need to move fast!)
-  // This allows "wave surfing" - crossing blast zones if timing is safe
-  const player = { x: bx, y: by }
+  // Find escape path from CURRENT PLAYER position (not bomb position!)
+  // CRITICAL: Bot is at myBomber position (pixel coords), bomb will be at bombPos (grid coords)
+  // We need to validate escape from WHERE THE BOT IS NOW, not where bomb will be
+  // Convert bomber pixel position to grid coordinates
+  const bomberGridPos = toGridCoords(myBomber.x, myBomber.y)
+  const player = { x: bomberGridPos.x, y: bomberGridPos.y }
+
   const escapePath = findBestPath(
     map,
     player,
@@ -120,9 +124,9 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // CRITICAL SAFETY CHECK: Verify escape destination is truly safe
-  // Calculate where bot will end up after escape
-  let finalX = bx
-  let finalY = by
+  // Calculate where bot will end up after escape (starting from CURRENT grid position)
+  let finalX = bomberGridPos.x
+  let finalY = bomberGridPos.y
   for (const step of escapePath.path) {
     if (step === "UP") finalY--
     else if (step === "DOWN") finalY++

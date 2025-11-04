@@ -12,6 +12,13 @@ export { findEscapeAction, checkSafety } from "./unifiedEscape.js"
 export { findTrapOpportunities, isEnemyTrapped } from "./trapDetector.js"
 
 export {
+  evaluateEnemyBombing,
+  findBestEnemyBombPosition,
+  checkImmediateEnemyBomb,
+  decideEnemyBombing,
+} from "./enemyBombing.js"
+
+export {
   dynamicItemPriority,
   calculateRiskTolerance,
   determineGamePhase,

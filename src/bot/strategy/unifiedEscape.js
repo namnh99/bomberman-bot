@@ -1,21 +1,22 @@
 import { DIRS, GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
-import { posKey, isWalkable, toGridCoords } from "../../utils/gridUtils.js"
+import { posKey, isWalkable } from "../../utils/gridUtils.js"
 import { getBombWithGrid } from "../../utils/bombUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
 import { findWaveSurfingPath, getWaveSurfingDirection } from "../pathfinding/waveSurfing.js"
+import { getBomber } from "../../helpers/gameState.js"
 
 /**
  * UNIFIED ESCAPE SYSTEM
  *
- * Một hệ thống escape duy nhất, tích hợp tất cả strategies:
+ * Single escape, integrate all strategies:
  * - Wave Surfing (4+ bombs)
  * - Staged Escape (2-3 bombs with timing differences)
  * - Path-based Escape (standard BFS)
  * - Emergency Moves (desperate situations)
  *
- * Anti-ping-pong protection tích hợp sẵn
+ * Anti-ping-pong protection included
  */
 
 // Anti-ping-pong tracking
@@ -25,7 +26,7 @@ let lastEscapeTime = 0
 const REVERSAL_COOLDOWN = 2000 // 2s
 
 /**
- * Main escape function - duy nhất entry point
+ * Main escape function - single entry point
  */
 export function findEscapeAction(map, player, bombs, bombers, myUid) {
   const myBomber = bombers.find((b) => b.uid === myUid)
@@ -35,7 +36,8 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
 
   // Filter relevant bombs (within 8 tiles)
   const nearbyBombs = bombs.filter((bomb) => {
-    const dist = Math.abs(bomb.x - player.x) + Math.abs(bomb.y - player.y)
+    const { gridX, gridY } = getBombWithGrid(bomb)
+    const dist = Math.abs(gridX - player.x) + Math.abs(gridY - player.y)
     return dist <= 8
   })
 
@@ -76,9 +78,13 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
  * PRIORITY 1: Wave Surfing for complex multi-bomb scenarios
  */
 function tryWaveSurfing(player, bombs, map, bombers, myUid) {
-  console.log(
-    `   🌊 Trying Wave Surfing (${bombs.filter((b) => Math.abs(b.x - player.x) + Math.abs(b.y - player.y) <= 8).length} bombs)...`,
-  )
+  // Count nearby bombs using grid coordinates
+  const nearbyCount = bombs.filter((b) => {
+    const { gridX, gridY } = getBombWithGrid(b)
+    return Math.abs(gridX - player.x) + Math.abs(gridY - player.y) <= 8
+  }).length
+
+  console.log(`   🌊 Trying Wave Surfing (${nearbyCount} bombs)...`)
 
   const surfPath = findWaveSurfingPath(player, bombs, map, bombers, myUid)
 

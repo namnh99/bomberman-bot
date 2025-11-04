@@ -1,4 +1,4 @@
-import { toGridCoords } from "../utils/gridUtils.js"
+import { inBounds, toGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid } from "../utils/bombUtils.js"
 import { WALKABLE } from "../utils/constants.js"
 
@@ -39,9 +39,9 @@ export class BombTracker {
 /**
  * Check if a tile is walkable
  */
-export function isWalkable(map, x, y, bombs, myUid) {
+export function isWalkable(map, x, y, bombs) {
   // Out of bounds
-  if (y < 0 || y >= map.length || x < 0 || x >= map[0].length) {
+  if (!inBounds(x, y)) {
     return false
   }
 
