@@ -63,10 +63,11 @@ export function findBestPath(
       // Check if tile is in bomb zone
       const isInBombZone = unsafeTiles.has(key)
 
-      // PRIORITY 1: ALWAYS avoid bomb zones when not escaping (SAFE STRATEGY)
-      if (!isEscaping && isInBombZone) {
+      // CRITICAL: ALWAYS validate timing when crossing bomb zones
+      // Even when escaping, we MUST check if we can pass through safely
+      if (isInBombZone) {
         // Only allow crossing if explicitly enabled AND timing is safe
-        if (allowTimingCrossing) {
+        if (allowTimingCrossing || isEscaping) {
           const nextStepCount = stepCount + 1
           const isSafeByTiming = isTileSafeByTime(
             nx,

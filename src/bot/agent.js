@@ -585,13 +585,13 @@ export function decideNextAction(state, myUid) {
       )
     })
   }
-  console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
+  // console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
 
   // PHASE 0: Game Context Analysis
   console.log("\n🔍 PHASE 0: Game Context Analysis")
-  const enemies = findAllEnemies(map, bombs, bombers, myUid)
-  const allItems = findAllItems(map, bombs, bombers)
-  const allChests = findAllChests(map, bombs, bombers)
+  const enemies = findAllEnemies(bombers, myUid)
+  const allItems = findAllItems(map, bombs, bombers, false)
+  const allChests = findAllChests(map, bombs, bombers, false)
 
   const gamePhase = determineGamePhase(myBomber, enemies, allItems, allChests)
   const riskTolerance = calculateRiskTolerance(myBomber, enemies, allItems, allChests)

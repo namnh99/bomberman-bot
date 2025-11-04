@@ -19,12 +19,14 @@ export function findUnsafeTiles(map, bombs = [], allBombers = []) {
     unsafeCoords.add(posKey(gridX, gridY))
 
     for (const [dx, dy] of DIRS) {
+      let isBlocked = false
       for (let step = 1; step <= range; step++) {
         const nx = gridX + dx * step
         const ny = gridY + dy * step
 
         if (!inBounds(nx, ny)) break
-        if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) break
+        if (isBlocked) break
+        if (BLOCKABLE_EXPLOSION.includes(map[ny][nx])) isBlocked = true
 
         unsafeCoords.add(posKey(nx, ny))
       }

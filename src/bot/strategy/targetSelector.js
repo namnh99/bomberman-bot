@@ -5,9 +5,9 @@ import { findUnsafeTiles } from "../pathfinding/dangerMap.js"
 /**
  * Find all collectable items on the map (safe from bombs)
  */
-export function findAllItems(map, bombs, allBombers) {
+export function findAllItems(map, bombs, allBombers, inExplosionRange = true) {
   const items = []
-  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
+  const unsafeTiles = inExplosionRange ? findUnsafeTiles(map, bombs, allBombers) : new Set()
 
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
@@ -24,9 +24,9 @@ export function findAllItems(map, bombs, allBombers) {
 /**
  * Find all chests on the map (safe from bombs)
  */
-export function findAllChests(map, bombs, allBombers) {
+export function findAllChests(map, bombs, allBombers, inExplosionRange = true) {
   const targets = []
-  const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
+  const unsafeTiles = inExplosionRange ? findUnsafeTiles(map, bombs, allBombers) : new Set()
 
   for (let y = 0; y < map.length; y++) {
     for (let x = 0; x < map[y].length; x++) {
@@ -42,7 +42,7 @@ export function findAllChests(map, bombs, allBombers) {
 /**
  * Find all enemy bombers (alive, not me)
  */
-export function findAllEnemies(map, bombs, allBombers, myUid) {
+export function findAllEnemies(allBombers, myUid) {
   const enemies = []
 
   for (const b of allBombers) {

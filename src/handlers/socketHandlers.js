@@ -2,6 +2,7 @@ import { GRID_SIZE, ITEMS } from "../utils/constants.js"
 import { toGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid } from "../utils/bombUtils.js"
 import { findUnsafeTiles } from "../bot/agent.js"
+import { isPathSafeByTime } from "../bot/pathfinding/safetyEvaluator.js"
 import {
   updateBomberPosition,
   updateBomberAttributes,
@@ -104,13 +105,7 @@ export function registerSocketHandlers(
 
     if (bomb.uid !== gameContext.myUid) {
       // CRITICAL: Check if new bomb affects our paths
-      handleNewBombDuringPath(
-        bomb,
-        gameContext,
-        pathModeManager,
-        manualControlManager,
-        onMakeDecision,
-      )
+      handleNewBombDuringPath(gameContext, pathModeManager, manualControlManager, onMakeDecision)
     }
   })
 
@@ -168,7 +163,6 @@ export function registerSocketHandlers(
  * Handle new bomb during path execution
  */
 function handleNewBombDuringPath(
-  bomb,
   gameContext,
   pathModeManager,
   manualControlManager,
@@ -182,40 +176,36 @@ function handleNewBombDuringPath(
     if (myBomber) {
       const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
 
-      // Check if the new bomb threatens our escape path
+      const escapePath = pathModeManager.escapePath
+      const escapeCoordinates = pathModeManager.getEscapeCoordinates()
+
       const unsafeTiles = findUnsafeTiles(
         gameContext.currentState.map,
         gameContext.currentState.bombs,
         gameContext.currentState.bombers,
       )
 
-      // CRITICAL: Check ENTIRE remaining escape path, not just destination
-      const escapePath = pathModeManager.escapePath
-      let pathHasUnsafeTile = false
-      let unsafeTileInfo = null
-
-      for (const step of escapePath) {
-        if (unsafeTiles.has(step)) {
-          pathHasUnsafeTile = true
-          unsafeTileInfo = step
-          break
-        }
-      }
-
       const currentUnsafe = unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)
-
       console.log(
         `   Current: [${playerGridPos.x}, ${playerGridPos.y}] ${currentUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
       )
-      console.log(`   Path remaining: ${escapePath.join(" → ")}`)
+      console.log(`   Escape path remaining: ${escapePath.join(" → ")}`)
 
-      if (pathHasUnsafeTile) {
-        console.log(`   ⚠️  Escape path tile [${unsafeTileInfo}] is now UNSAFE!`)
-        console.log(`   🔄 ABORT ESCAPE - Finding new escape route!`)
-        // Cancel current escape
-        pathModeManager.abortEscape("Path blocked by new bomb")
+      // Validate timing for entire escape path
+      const isSafe = isPathSafeByTime(
+        escapeCoordinates,
+        gameContext.currentState.bombs,
+        gameContext.currentState.bombers,
+        gameContext.currentState.map,
+        myBomber.speed || 1,
+        "ESCAPE",
+      )
+
+      if (!isSafe) {
+        console.log(`   🚨 ABORT ESCAPE PATH: escape path is unsafe!`)
+        console.log(`   🔄 Entering emergency escape mode...`)
+        pathModeManager.abortEscape("Path blocked by new bomb - timing unsafe")
         gameContext.forceClearIntervals()
-        // Immediately find new escape route
         onMakeDecision()
       } else {
         console.log(`   ✅ Entire escape path is safe, continuing escape...`)
@@ -228,31 +218,32 @@ function handleNewBombDuringPath(
     if (myBomber) {
       console.log(`\n🚨 NEW BOMB during follow path! Checking if path is still safe...`)
 
+      const followPath = pathModeManager.followPath
+      const followCoordinates = pathModeManager.getFollowCoordinates()
+
+      console.log(`   Follow path remaining: ${followPath.join(" → ")}`)
+
       const unsafeTiles = findUnsafeTiles(
         gameContext.currentState.map,
         gameContext.currentState.bombs,
         gameContext.currentState.bombers,
       )
 
-      // CRITICAL: Check ENTIRE remaining follow path
-      const followPath = pathModeManager.followPath
-      let pathHasUnsafeTile = false
-      let unsafeTileInfo = null
+      // Validate timing for entire follow path
+      const isSafe = validatePathTiming(
+        followCoordinates,
+        unsafeTiles,
+        gameContext.currentState.bombs,
+        gameContext.currentState.bombers,
+        gameContext.currentState.map,
+        myBomber.speed || 1,
+        "FOLLOW",
+      )
 
-      for (const step of followPath) {
-        if (unsafeTiles.has(step)) {
-          pathHasUnsafeTile = true
-          unsafeTileInfo = step
-          break
-        }
-      }
-
-      console.log(`   Path remaining: ${followPath.join(" → ")}`)
-
-      if (pathHasUnsafeTile) {
-        console.log(`   ⚠️  Follow path tile [${unsafeTileInfo}] is now UNSAFE!`)
-        console.log(`   🔄 Aborting follow and re-evaluating...`)
-        pathModeManager.abortFollow("Path blocked by new bomb")
+      if (!isSafe) {
+        console.log(`   🚨 ABORT FOLLOW PATH: follow path is unsafe!`)
+        console.log(`   🔄 Entering emergency escape mode...`)
+        pathModeManager.abortFollow("Path crosses bomb zone with unsafe timing")
         gameContext.forceClearIntervals()
         onMakeDecision()
       } else {
