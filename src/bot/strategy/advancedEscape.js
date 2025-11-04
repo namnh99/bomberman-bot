@@ -3,6 +3,7 @@ import { calculateDangerTimeline, findSafestTimedPath } from "../pathfinding/tim
 import { manhattanDistance, posKey } from "../../utils/gridUtils.js"
 import { findBestPath } from "../pathfinding/index.js"
 import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
+import { findWaveSurfingPath } from "../pathfinding/waveSurfing.js"
 
 /**
  * Advanced escape strategy for multi-bomb scenarios
@@ -24,6 +25,45 @@ export function findAdvancedEscapePath(player, map, bombs, allBombers, myBomber)
 
   console.log(`   📊 ${relevantBombs.length} nearby bomb(s) out of ${bombs.length} total`)
 
+  // PRIORITY 1: Wave Surfing for complex multi-bomb scenarios (4+ bombs)
+  if (relevantBombs.length >= 4) {
+    console.log(`   🌊 Attempting Wave Surfing (${relevantBombs.length} bombs)...`)
+    const surfingPath = findWaveSurfingPath(player, bombs, map, allBombers, myBomber.uid)
+
+    if (surfingPath && surfingPath.target) {
+      console.log(`   ✅ Wave Surfing path found!`)
+      console.log(`      Strategy: ${surfingPath.strategy}`)
+      console.log(`      Target: [${surfingPath.target.x}, ${surfingPath.target.y}]`)
+
+      if (surfingPath.path && surfingPath.path.length > 0) {
+        return {
+          path: surfingPath.path,
+          target: surfingPath.target,
+          strategy: surfingPath.strategy,
+        }
+      } else {
+        // Wave surfing found target but no path - use regular pathfinding to target
+        const pathResult = findBestPath(
+          map,
+          player,
+          [surfingPath.target],
+          bombs,
+          allBombers,
+          myBomber.uid,
+          true,
+        )
+        if (pathResult && pathResult.path && pathResult.path.length > 0) {
+          return {
+            path: pathResult.path,
+            target: surfingPath.target,
+            strategy: "wave_surfing_assisted",
+          }
+        }
+      }
+    }
+  }
+
+  // PRIORITY 2: Timed pathfinding for moderate scenarios (3 bombs)
   // Get danger timeline
   const timeline = calculateDangerTimeline(bombs, allBombers, map)
   const now = Date.now()

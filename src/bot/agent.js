@@ -9,9 +9,9 @@ import {
 } from "../utils/constants.js"
 import { posKey, isAdjacent, inBounds, toGridCoords, toBombGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
-import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
+import { findBestPath, findSafePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
-import { findSafeWaitingPosition } from "./strategy/stagedEscape.js"
+import { findEscapeAction, checkSafety } from "./strategy/unifiedEscape.js"
 import {
   findAllItems,
   findAllChests,
@@ -19,9 +19,6 @@ import {
   checkBombWouldDestroyItems,
   countChestsDestroyedByBomb,
   willBombHitEnemy,
-  checkSafety,
-  attemptEscape,
-  attemptEmergencyEscape,
   findTrapOpportunities,
   dynamicItemPriority,
   calculateRiskTolerance,
@@ -32,7 +29,6 @@ import {
   validateBombSafety,
   compareSingleVsMultiTarget,
 } from "./strategy/index.js"
-import { findAdvancedEscapePath } from "./strategy/advancedEscape.js"
 import { createFutureBomb } from "../utils/bombUtils.js"
 
 // Anti-oscillation: Track last position and decision
@@ -651,43 +647,12 @@ export function decideNextAction(state, myUid) {
   }
 
   if (!isPlayerSafe) {
-    // For multi-bomb scenarios (2+ bombs), try advanced timing escape
-    if (relevantBombs.length >= 2) {
-      console.log(`   🕐 Staged escape requires movement - trying advanced timing escape`)
-      const advancedEscape = findAdvancedEscapePath(player, map, bombs, bombers, myBomber)
-
-      if (advancedEscape && advancedEscape.path && advancedEscape.path.length > 0) {
-        console.log(
-          `   ✅ Advanced escape path found: ${advancedEscape.path.join(" → ")} (strategy: ${advancedEscape.strategy})`,
-        )
-        console.log(`🎯 DECISION: ESCAPE (advanced timing)`)
-        console.log("   Action:", advancedEscape.path[0])
-        console.log("=".repeat(90) + "\n")
-        trackDecision(player, advancedEscape.path[0])
-        trackEscape(player.x, player.y) // Track that we're escaping from this position
-        return {
-          action: advancedEscape.path[0],
-          isEscape: true,
-          fullPath: advancedEscape.path,
-          fullPathCoordinates: advancedEscape.fullPathCoordinates || [],
-        }
-      } else {
-        console.log(`   ⚠️ Advanced escape failed, falling back to standard escape`)
-      }
-    }
-
-    const escapeResult = attemptEscape(map, player, bombs, bombers, myBomber, myUid)
+    // Use unified escape system
+    const escapeResult = findEscapeAction(map, player, bombs, bombers, myUid)
     if (escapeResult) {
       trackDecision(player, escapeResult.action)
       trackEscape(player.x, player.y) // Track that we're escaping from this position
       return escapeResult
-    }
-
-    const emergencyResult = attemptEmergencyEscape(map, player, bombs, bombers, myBomber)
-    if (emergencyResult) {
-      trackDecision(player, emergencyResult.action)
-      trackEscape(player.x, player.y) // Track that we're escaping from this position
-      return emergencyResult
     }
 
     console.log("   ❌ No escape possible! Bracing for impact.")

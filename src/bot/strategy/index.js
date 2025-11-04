@@ -7,7 +7,7 @@ export {
   willBombHitEnemy,
 } from "./targetSelector.js"
 
-export { checkSafety, attemptEscape, attemptEmergencyEscape } from "./escapeStrategy.js"
+export { findEscapeAction, checkSafety } from "./unifiedEscape.js"
 
 export { findTrapOpportunities, isEnemyTrapped } from "./trapDetector.js"
 
@@ -36,5 +36,3 @@ export {
 export { validateBombSafety } from "./bombValidator.js"
 
 export { findMultiTargetPath, compareSingleVsMultiTarget } from "./multiTargetPath.js"
-
-export { findAdvancedEscapePath, detectBombChains } from "./advancedEscape.js"

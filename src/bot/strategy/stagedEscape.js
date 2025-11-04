@@ -1,4 +1,4 @@
-import { GRID_SIZE, WALKABLE } from "../../utils/constants.js"
+import { DIRS, WALKABLE, GRID_SIZE } from "../../utils/constants.js"
 import { posKey, manhattanDistance } from "../../utils/gridUtils.js"
 import { findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
@@ -384,18 +384,12 @@ export function canEscapeAfterWaiting(waitPosition, remainingBombs, map, bombers
     return true // Already safe, no need to escape
   }
 
-  // CRITICAL: Check if we have at least ONE walkable neighbor that is:
-  // 1. Not a wall/chest
-  // 2. Either outside blast zones OR has timing-safe escape
-  const DIRS = [
-    [0, -1, "UP"],
-    [0, 1, "DOWN"],
-    [-1, 0, "LEFT"],
-    [1, 0, "RIGHT"],
-  ]
+  // CRITICAL: Calculate distance to wait position for timing calculations
+  const distanceToWaitPos =
+    Math.abs(waitPosition.x - myBomber.x) + Math.abs(waitPosition.y - myBomber.y)
 
   let safeExitCount = 0
-  for (const [dx, dy, dirName] of DIRS) {
+  for (const [dx, dy] of DIRS) {
     const neighbor = { x: waitPosition.x + dx, y: waitPosition.y + dy }
 
     // Check bounds
@@ -420,12 +414,14 @@ export function canEscapeAfterWaiting(waitPosition, remainingBombs, map, bombers
     if (!unsafeFromRemaining.has(nKey)) {
       safeExitCount++
     } else {
-      // Check if we have time to escape through this tile
-      // Assume 1 step to move from waiting position to this neighbor
+      // CRITICAL FIX: Account for time already spent traveling to wait position
+      // Steps needed: (distanceToWaitPos) to reach wait position + 1 to reach neighbor
+      const totalSteps = distanceToWaitPos + 1
+
       const isSafeByTime = isTileSafeByTime(
         neighbor.x,
         neighbor.y,
-        1,
+        totalSteps,
         remainingBombs,
         bombers,
         map,

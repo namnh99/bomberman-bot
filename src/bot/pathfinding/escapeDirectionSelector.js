@@ -2,6 +2,7 @@ import { DIRS, WALKABLE } from "../../utils/constants.js"
 import { inBounds, posKey } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap } from "./dangerMap.js"
 import { getSafeTimeMargin } from "./safetyEvaluator.js"
+import { getWaveSurfingDirection, findWaveSurfingPath } from "./waveSurfing.js"
 
 /**
  * Find IMMEDIATE escape direction prioritizing slower-exploding bombs
@@ -18,6 +19,17 @@ import { getSafeTimeMargin } from "./safetyEvaluator.js"
 export function findPrioritizedEscapeDirection(map, start, bombs, allBombers, myUid) {
   const myBomber = allBombers.find((b) => b.uid === myUid)
   const currentSpeed = myBomber?.speed || 1
+
+  // PRIORITY 1: Try Wave Surfing for multi-bomb scenarios (3+ bombs)
+  if (bombs.length >= 3) {
+    const waveSurfDirection = getWaveSurfingDirection(start, bombs, map, allBombers, myUid)
+    if (waveSurfDirection) {
+      console.log(`   🏄 Wave Surfing direction selected: ${waveSurfDirection}`)
+      return waveSurfDirection
+    }
+  }
+
+  // PRIORITY 2: Fall back to timing-based escape direction
   const unsafeTiles = findUnsafeTiles(map, bombs, allBombers)
   const bombTiles = createBombTileMap(bombs)
 
