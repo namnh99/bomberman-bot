@@ -1,11 +1,10 @@
 import { DIRS, GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
-import { posKey, isWalkable } from "../../utils/gridUtils.js"
+import { posKey, isWalkable, manhattanDistance } from "../../utils/gridUtils.js"
 import { getBombWithGrid } from "../../utils/bombUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
 import { findWaveSurfingPath, getWaveSurfingDirection } from "../pathfinding/waveSurfing.js"
-import { getBomber } from "../../helpers/gameState.js"
 
 /**
  * UNIFIED ESCAPE SYSTEM
@@ -37,8 +36,8 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
   // Filter relevant bombs (within 8 tiles)
   const nearbyBombs = bombs.filter((bomb) => {
     const { gridX, gridY } = getBombWithGrid(bomb)
-    const dist = Math.abs(gridX - player.x) + Math.abs(gridY - player.y)
-    return dist <= 8
+    const distance = manhattanDistance(gridX, gridY, player.x, player.y)
+    return distance <= 8
   })
 
   if (nearbyBombs.length === 0) {
@@ -81,7 +80,8 @@ function tryWaveSurfing(player, bombs, map, bombers, myUid) {
   // Count nearby bombs using grid coordinates
   const nearbyCount = bombs.filter((b) => {
     const { gridX, gridY } = getBombWithGrid(b)
-    return Math.abs(gridX - player.x) + Math.abs(gridY - player.y) <= 8
+    const distance = manhattanDistance(gridX, gridY, player.x, player.y)
+    return distance <= 8
   }).length
 
   console.log(`   🌊 Trying Wave Surfing (${nearbyCount} bombs)...`)
@@ -372,8 +372,8 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
     let minDist = Infinity
     for (const bomb of bombs) {
       const { gridX, gridY } = getBombWithGrid(bomb)
-      const dist = Math.abs(nx - gridX) + Math.abs(ny - gridY)
-      minDist = Math.min(minDist, dist)
+      const distance = manhattanDistance(nx, ny, gridX, gridY)
+      minDist = Math.min(minDist, distance)
     }
 
     // Check if safe by timing

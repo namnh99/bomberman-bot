@@ -678,7 +678,6 @@ export function decideNextAction(state, myUid) {
       recordBombPlacement,
       trackDecision,
       riskTolerance,
-      checkBombWouldDestroyItems,
     })
 
     if (trapResult) {
@@ -743,7 +742,6 @@ export function decideNextAction(state, myUid) {
       recordBombPlacement,
       trackDecision,
       maxDistance: 12, // ULTRA AGGRESSIVE: Pursue enemies within 12 tiles
-      checkBombWouldDestroyItems,
     })
 
     if (priorityPursuitResult) {
@@ -1200,7 +1198,6 @@ export function decideNextAction(state, myUid) {
       canBombAtPosition,
       recordBombPlacement,
       trackDecision,
-      checkBombWouldDestroyItems,
     })
 
     if (defenseResult) {
@@ -1224,7 +1221,6 @@ export function decideNextAction(state, myUid) {
         canBombAtPosition,
         recordBombPlacement,
         trackDecision,
-        checkBombWouldDestroyItems,
       })
 
       if (pursuitResult) {

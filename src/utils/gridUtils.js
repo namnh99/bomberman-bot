@@ -12,7 +12,6 @@ export function toGridCoords(pixelX, pixelY) {
 
 /**
  * Calculate bomb placement position using server's logic
- * CRITICAL: Server uses floor((pixel + 20) / GRID_SIZE) for bomb placement
  * Used for: predicting where bomb will be placed, escape planning
  */
 export function toBombGridCoords(pixelX, pixelY) {
@@ -99,4 +98,24 @@ export function canExplosionReach(bombX, bombY, targetX, targetY, map, range) {
   }
 
   return false
+}
+
+/**
+ * Calculate final position after following a path
+ * @param {Object} startPos - Starting position {x, y}
+ * @param {Array} pathSteps - Array of direction strings (LEFT, RIGHT, UP, DOWN)
+ * @returns {Object} Final position {x, y}
+ */
+export function calculateFinalPosition(startPos, pathSteps) {
+  let x = startPos.x
+  let y = startPos.y
+
+  for (const step of pathSteps) {
+    if (step === "LEFT") x -= 1
+    if (step === "RIGHT") x += 1
+    if (step === "UP") y -= 1
+    if (step === "DOWN") y += 1
+  }
+
+  return { x, y }
 }

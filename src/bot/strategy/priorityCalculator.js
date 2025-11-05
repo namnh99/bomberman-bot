@@ -144,8 +144,8 @@ export function determineGamePhase(myBomber, enemies, items, chests, elapsedTime
   }
 
   // Resource-based
-  if (totalResources > 20) return "early"
-  if (totalResources < 5) return "late"
+  if (totalResources > 40) return "early"
+  if (totalResources < 20) return "late"
 
   // Enemy-based
   if (aliveEnemies <= 1) return "late"

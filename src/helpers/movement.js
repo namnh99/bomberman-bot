@@ -1,4 +1,5 @@
 import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "../utils/constants.js"
+import { manhattanDistance } from "../utils/gridUtils.js"
 
 /**
  * Send a single move command to the server
@@ -112,7 +113,7 @@ export function calculateStuckTimeout(speed) {
  * Check if bot is stuck (not moving)
  */
 export function isStuck(currentPos, lastPos, threshold = 2) {
-  const movedDistance = Math.abs(currentPos.x - lastPos.x) + Math.abs(currentPos.y - lastPos.y)
+  const movedDistance = manhattanDistance(currentPos.x, currentPos.y, lastPos.x, lastPos.y)
   return movedDistance < threshold
 }
 

@@ -166,38 +166,6 @@ function countAdjacentWalls(x, y, map) {
 }
 
 /**
- * Find safest position within radius
- */
-export function findSafestNearbyPosition(currentPos, map, bombs, enemies, radius = 3) {
-  const candidates = []
-
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      const x = currentPos.x + dx
-      const y = currentPos.y + dy
-
-      if (!isWalkable(x, y, map)) continue
-
-      const risk = evaluatePositionRisk(x, y, map, bombs, enemies)
-      const distance = Math.abs(dx) + Math.abs(dy)
-
-      candidates.push({
-        x,
-        y,
-        risk,
-        distance,
-        score: risk * 10 + distance * 0.5, // Heavily weight risk over distance
-      })
-    }
-  }
-
-  if (candidates.length === 0) return null
-
-  candidates.sort((a, b) => a.score - b.score)
-  return candidates[0]
-}
-
-/**
  * Check if moving to position would trap us
  */
 export function wouldMoveTrapUs(currentPos, nextPos, map, bombs, enemies) {

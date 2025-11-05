@@ -133,25 +133,3 @@ function evaluateTrapPosition(myPos, enemy, escapeRoutes, map, myBomber) {
     willKill,
   }
 }
-
-/**
- * Check if enemy is in a confined space (corner, dead-end, narrow corridor)
- * INTERNAL HELPER - Not exported
- */
-export function isEnemyTrapped(ex, ey, map) {
-  let walkableNeighbors = 0
-
-  for (const [dx, dy] of DIRS) {
-    if (isWalkable(ex + dx, ey + dy, map)) {
-      walkableNeighbors++
-    }
-  }
-
-  // Corner: 2 or fewer exits
-  // Dead-end: 1 exit
-  return {
-    isInCorner: walkableNeighbors <= 2,
-    isInDeadEnd: walkableNeighbors === 1,
-    exitCount: walkableNeighbors,
-  }
-}

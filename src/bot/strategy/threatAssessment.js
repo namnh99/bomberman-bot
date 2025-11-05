@@ -137,26 +137,26 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
   }
 
   // ENDGAME: Fight if few enemies left (1-3) - VERY aggressive!
-  // REDUCED threshold to 50% - fight even when much weaker!
+  // Fight if have 70% power or more
   if (enemies.length <= 3 && (resources.chestCount < 20 || resources.itemCount < 3)) {
-    if (myPower >= avgEnemyPower * 0.5) {
-      // Fight even if MUCH weaker - ultra aggressive endgame!
+    if (myPower >= avgEnemyPower * 0.7) {
+      // Fight if reasonably strong - aggressive endgame!
       console.log(
-        `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (only need 50% power)`,
+        `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (have 70%+ power)`,
       )
       return "fight"
     } else {
       console.log(
-        `   ⚠️ ENDGAME but too weak: need ${(avgEnemyPower * 0.5).toFixed(1)} power, have ${myPower.toFixed(1)}`,
+        `   ⚠️ ENDGAME but too weak: need ${(avgEnemyPower * 0.7).toFixed(1)} power, have ${myPower.toFixed(1)}`,
       )
     }
   }
 
-  // ULTRA AGGRESSIVE: Fight if we're stronger OR EQUAL
-  // REDUCED to 1.0x - fight whenever not significantly weaker!
-  if (myPower >= avgEnemyPower * 1.0 && (resources.itemCount > 5 || resources.chestCount > 3)) {
+  // AGGRESSIVE: Fight if we're stronger (120%+ power) with resources available
+  // Increased from 1.0x to 1.2x to ensure we're actually stronger
+  if (myPower >= avgEnemyPower * 1.2 && (resources.itemCount > 5 || resources.chestCount > 3)) {
     console.log(
-      `   ⚔️ Equal/stronger with resources (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 1.0) → FIGHT!`,
+      `   ⚔️ Stronger with resources (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 1.2) → FIGHT!`,
     )
     return "fight"
   }
@@ -169,32 +169,32 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
     return "fight"
   }
 
-  // VERY AGGRESSIVE: Fight if we have ≥60% power (was 75%)
-  // This makes bot ULTRA willing to fight
-  if (enemies.length >= 1 && myPower >= avgEnemyPower * 0.6) {
-    console.log(`   ⚔️ Decent power (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 0.6) → FIGHT!`)
+  // BALANCED: Fight if we have ≥80% power (was 60%)
+  // This makes bot more selective about fights
+  if (enemies.length >= 1 && myPower >= avgEnemyPower * 0.8) {
+    console.log(`   ⚔️ Good power (${(myPower / avgEnemyPower).toFixed(2)}x ≥ 0.8) → FIGHT!`)
     return "fight"
   }
 
-  // Only flee if outnumbered (3+) AND MUCH weaker (<50% power)
-  // VERY AGGRESSIVE - only flee when truly hopeless!
-  if (enemies.length >= 3 && myPower < avgEnemyPower * 0.5) {
+  // Flee if outnumbered (3+) AND weaker (<70% power)
+  // Increased from 50% to 70% to flee earlier when outmatched
+  if (enemies.length >= 3 && myPower < avgEnemyPower * 0.7) {
     console.log(
-      `   🏃 Heavily outnumbered (${enemies.length} enemies) and MUCH weaker (${(myPower / avgEnemyPower).toFixed(2)}x < 0.5) → FLEE!`,
+      `   🏃 Heavily outnumbered (${enemies.length} enemies) and weaker (${(myPower / avgEnemyPower).toFixed(2)}x < 0.7) → FLEE!`,
     )
     return "flee"
   }
 
-  // Default: FIGHT unless extremely dangerous
-  // ULTRA AGGRESSIVE - prefer fighting over fleeing
+  // Default: NEUTRAL unless extreme conditions
+  // Changed from "fight" to "neutral" for more balanced gameplay
   if (mostThreatening.threat > 0.8) {
     console.log(`   🏃 EXTREME threat level (${mostThreatening.threat.toFixed(2)} > 0.8) → FLEE!`)
     return "flee"
-  } else if (mostThreatening.threat < 0.5) {
-    console.log(`   ⚔️ Manageable threat (${mostThreatening.threat.toFixed(2)} < 0.5) → FIGHT!`)
+  } else if (mostThreatening.threat < 0.4) {
+    console.log(`   ⚔️ Low threat (${mostThreatening.threat.toFixed(2)} < 0.4) → FIGHT!`)
     return "fight"
   }
 
-  console.log(`   ⚔️ Medium threat → DEFAULT FIGHT! (${mostThreatening.threat.toFixed(2)})`)
-  return "fight" // Changed from "neutral" to "fight" - always aggressive!
+  console.log(`   🤝 Medium threat → NEUTRAL (${mostThreatening.threat.toFixed(2)})`)
+  return "neutral" // Changed from "fight" to "neutral" - more defensive default
 }

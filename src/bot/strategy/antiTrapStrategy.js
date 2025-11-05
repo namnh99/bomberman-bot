@@ -1,5 +1,5 @@
 import { DIRS, WALKABLE } from "../../utils/constants.js"
-import { inBounds, posKey } from "../../utils/gridUtils.js"
+import { inBounds, manhattanDistance, posKey } from "../../utils/gridUtils.js"
 import { findUnsafeTiles, createBombTileMap } from "../pathfinding/dangerMap.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../../utils/bombUtils.js"
 
@@ -86,8 +86,9 @@ export function detectTrapSituation(myPos, map, bombs, bombers, myUid) {
   // Check if bombs are from enemies (trap attempt)
   const enemyBombs = bombs.filter((b) => b.uid !== myUid)
   const nearbyEnemyBombs = enemyBombs.filter((b) => {
-    const dist = Math.abs(b.x / 40 - myPos.x) + Math.abs(b.y / 40 - myPos.y)
-    return dist <= 3
+    const { gridX, gridY } = getBombWithGrid(b)
+    const distance = manhattanDistance(gridX, gridY, myPos.x, myPos.y)
+    return distance <= 3
   })
 
   const isEnemyTrap = nearbyEnemyBombs.length >= 2
@@ -152,9 +153,9 @@ export function suggestEvasiveAction(trapInfo, myPos, map, bombs, bombers, myUid
       let minTimeMargin = Infinity
       for (const bomb of bombs) {
         const { gridX, gridY } = getBombWithGrid(bomb)
-        const dist = Math.abs(gridX - n.x) + Math.abs(gridY - n.y)
+        const distance = manhattanDistance(gridX, gridY, n.x, n.y)
 
-        if (dist <= bomb.explosionRange) {
+        if (distance <= bomb.explosionRange) {
           const timeRemaining = getTimeUntilExplosion(bomb)
           minTimeMargin = Math.min(minTimeMargin, timeRemaining)
         }

@@ -19,8 +19,8 @@ export const BLOCKABLE_EXPLOSION = ["W", "C", "B", "R", "S"]
 // Strategic values for different items
 export const ITEM_VALUES = {
   S: 3.0, // Speed - very valuable for mobility and escaping
-  R: 2.5, // Explosion Range - valuable for destroying more chests
   B: 2.0, // Bomb Count - valuable for offensive play
+  R: 1.5, // Explosion Range - valuable for destroying more chests
 }
 
 export const MAP_SIZE = 16

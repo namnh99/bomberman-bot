@@ -9,14 +9,9 @@ export {
 
 export { findEscapeAction, checkSafety } from "./unifiedEscape.js"
 
-export { findTrapOpportunities, isEnemyTrapped } from "./trapDetector.js"
+export { findTrapOpportunities } from "./trapDetector.js"
 
-export {
-  evaluateEnemyBombing,
-  findBestEnemyBombPosition,
-  checkImmediateEnemyBomb,
-  decideEnemyBombing,
-} from "./enemyBombing.js"
+export { decideEnemyBombing } from "./enemyBombing.js"
 
 export {
   dynamicItemPriority,
@@ -31,8 +26,6 @@ export {
   findChainReactionOpportunities,
   isChainReactionWorthwhile,
 } from "./chainReaction.js"
-
-export { evaluateZoneControl } from "./zoneControl.js"
 
 export {
   scoreEnemyThreat,

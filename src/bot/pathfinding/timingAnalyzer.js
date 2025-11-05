@@ -63,32 +63,6 @@ function getExplosionPath(bx, by, range, map) {
 }
 
 /**
- * Find optimal escape window - earliest time we can safely reach a tile
- */
-export function findEscapeWindow(targetX, targetY, timeline, arrivalTime) {
-  const key = posKey(targetX, targetY)
-  const danger = timeline.get(key)
-
-  if (!danger) {
-    return { canReach: true, waitTime: 0, reason: "always_safe" }
-  }
-
-  // Check if we arrive before danger starts
-  if (arrivalTime < danger.dangerStart) {
-    return { canReach: true, waitTime: 0, reason: "arrive_before_explosion" }
-  }
-
-  // Check if we can wait for danger to pass
-  const waitNeeded = danger.dangerEnd - arrivalTime
-  if (waitNeeded > 0 && waitNeeded < 2000) {
-    // Max 2s wait
-    return { canReach: true, waitTime: waitNeeded, reason: "wait_for_explosion" }
-  }
-
-  return { canReach: false, waitTime: 0, reason: "cannot_avoid_explosion" }
-}
-
-/**
  * Advanced: Find path that minimizes time in danger zones
  */
 export function findSafestTimedPath(start, target, map, bombs, allBombers, currentSpeed = 1) {

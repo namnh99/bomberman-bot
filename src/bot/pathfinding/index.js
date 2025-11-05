@@ -1,6 +1,6 @@
 export { findBestPath, findShortestEscapePath, findSafePath } from "./pathFinder.js"
 export { findUnsafeTiles, findSafeTiles, createBombTileMap } from "./dangerMap.js"
 export { isTileSafeByTime } from "./safetyEvaluator.js"
-export { calculateDangerTimeline, findEscapeWindow, findSafestTimedPath } from "./timingAnalyzer.js"
-export { evaluatePositionRisk, findSafestNearbyPosition, wouldMoveTrapUs } from "./riskEvaluator.js"
+export { calculateDangerTimeline, findSafestTimedPath } from "./timingAnalyzer.js"
+export { evaluatePositionRisk, wouldMoveTrapUs } from "./riskEvaluator.js"
 export { findPrioritizedEscapeDirection } from "./escapeDirectionSelector.js"
