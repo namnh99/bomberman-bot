@@ -181,7 +181,6 @@ async function smoothMove(direction) {
           `   ❌ ALIGNMENT ISSUE: Bot not on grid (X%40=${currentPixelX % GRID_SIZE}, Y%40=${currentPixelY % GRID_SIZE})`,
         )
 
-        gameContext.forceClearIntervals()
         // Abort current path and re-evaluate
         if (pathModeManager.isEscaping()) {
           pathModeManager.abortEscape("Path blocked")
@@ -192,6 +191,7 @@ async function smoothMove(direction) {
 
         makeDecision()
         stuckCounter = 0
+        gameContext.forceClearIntervals()
         return
       }
     } else {

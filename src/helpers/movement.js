@@ -19,48 +19,65 @@ export function sendMoveCommand(socket, direction) {
  */
 export function alignToGrid(direction, myBomber, socket, gameContext) {
   return new Promise((resolve) => {
+    // CRITICAL: Check BOTH axes for comprehensive alignment
+    const xOffset = myBomber.x % GRID_SIZE
+    const yOffset = myBomber.y % GRID_SIZE
+    const xAligned = xOffset <= GRID_SIZE - BOT_SIZE
+    const yAligned = yOffset <= GRID_SIZE - BOT_SIZE
+
+    console.log(
+      `   🔧 Checking alignment: X-offset=${xOffset} (${xAligned ? "✓" : "✗"}), Y-offset=${yOffset} (${yAligned ? "✓" : "✗"})`,
+    )
+
+    // If BOTH axes are aligned, no alignment needed
+    if (xAligned && yAligned) {
+      console.log(`   ✅ Already aligned on both axes`)
+      return resolve()
+    }
+
+    // Determine which axis needs alignment based on direction
     let moveOver = null
     let alignDirection = null
 
     if (direction === "UP" || direction === "DOWN") {
-      // Check horizontal alignment (X-axis)
-      const xOffset = myBomber.x % GRID_SIZE
-      console.log(`   🔧 Checking alignment X-offset: ${xOffset}`)
+      // For vertical movement, ensure horizontal alignment (X-axis)
+      if (!xAligned) {
+        console.log(`   🔧 Aligning X-axis for ${direction} movement`)
+        const offset = (GRID_SIZE - BOT_SIZE) / 2 // Target center position = 17.5
 
-      // If offset <= 5 (GRID_SIZE - BOT_SIZE), bot is within grid cell - already aligned
-      if (xOffset <= GRID_SIZE - BOT_SIZE) {
-        console.log(`   ✅ Already aligned (offset ${xOffset} <= ${GRID_SIZE - BOT_SIZE})`)
-        return resolve()
-      }
-
-      // Not aligned, need to move horizontally to get back into grid
-      const offset = (GRID_SIZE - BOT_SIZE) / 2
-      if (xOffset > BOT_SIZE / 2) {
-        alignDirection = "RIGHT"
-        moveOver = xOffset - offset
+        // CRITICAL: Fix alignment direction logic
+        if (xOffset < offset) {
+          // Bot is too far LEFT, need to move RIGHT to center
+          alignDirection = "RIGHT"
+          moveOver = offset - xOffset
+        } else {
+          // Bot is too far RIGHT, need to move LEFT to center
+          alignDirection = "LEFT"
+          moveOver = xOffset - offset
+        }
       } else {
-        alignDirection = "LEFT"
-        moveOver = GRID_SIZE - xOffset + offset
+        console.log(`   ⚠️ X-axis aligned but bot still stuck - this shouldn't happen`)
+        return resolve() // Continue anyway
       }
     } else if (direction === "LEFT" || direction === "RIGHT") {
-      // Check vertical alignment (Y-axis)
-      const yOffset = myBomber.y % GRID_SIZE
-      console.log(`   🔧 Checking alignment Y-offset: ${yOffset}`)
+      // For horizontal movement, ensure vertical alignment (Y-axis)
+      if (!yAligned) {
+        console.log(`   🔧 Aligning Y-axis for ${direction} movement`)
+        const offset = (GRID_SIZE - BOT_SIZE) / 2 // Target center position = 17.5
 
-      // If offset <= 5 (GRID_SIZE - BOT_SIZE), bot is within grid cell - already aligned
-      if (yOffset <= GRID_SIZE - BOT_SIZE) {
-        console.log(`   ✅ Already aligned (offset ${yOffset} <= ${GRID_SIZE - BOT_SIZE})`)
-        return resolve()
-      }
-
-      // Not aligned, need to move vertically to get back into grid
-      const offset = (GRID_SIZE - BOT_SIZE) / 2
-      if (yOffset > BOT_SIZE / 2) {
-        alignDirection = "DOWN"
-        moveOver = yOffset - offset
+        // CRITICAL: Fix alignment direction logic
+        if (yOffset < offset) {
+          // Bot is too far UP, need to move DOWN to center
+          alignDirection = "DOWN"
+          moveOver = offset - yOffset
+        } else {
+          // Bot is too far DOWN, need to move UP to center
+          alignDirection = "UP"
+          moveOver = yOffset - offset
+        }
       } else {
-        alignDirection = "UP"
-        moveOver = GRID_SIZE - yOffset + offset
+        console.log(`   ⚠️ Y-axis aligned but bot still stuck - this shouldn't happen`)
+        return resolve() // Continue anyway
       }
     }
 
@@ -104,7 +121,7 @@ export function alignToGrid(direction, myBomber, socket, gameContext) {
  */
 export function calculateStuckTimeout(speed) {
   const timeToMoveOneGrid = (GRID_SIZE / speed) * STEP_DELAY
-  const MAX_STUCK_TIME = Math.max(500, timeToMoveOneGrid * 2) // At least 500ms or 2x expected time
+  const MAX_STUCK_TIME = Math.max(400, timeToMoveOneGrid * 2) // At least 400ms or 2x expected time
   const MAX_STUCK_CHECKS = Math.ceil(MAX_STUCK_TIME / STEP_DELAY)
   return { MAX_STUCK_TIME, MAX_STUCK_CHECKS }
 }

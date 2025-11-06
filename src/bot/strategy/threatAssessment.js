@@ -139,7 +139,7 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
   // ENDGAME: Fight if few enemies left (1-3) - VERY aggressive!
   // Fight if have 70% power or more
   if (enemies.length <= 3 && (resources.chestCount < 20 || resources.itemCount < 3)) {
-    if (myPower >= avgEnemyPower * 0.7) {
+    if (myPower >= avgEnemyPower * 0.5) {
       // Fight if reasonably strong - aggressive endgame!
       console.log(
         `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (have 70%+ power)`,

@@ -531,11 +531,11 @@ export function decideNextAction(state, myUid) {
   isFollowingPath = false
 
   // --- Push current position into short history (keep last 4) ---
-  // const currentPosKeyForHistory = posKey(player.x, player.y)
-  // recentPositions.push(currentPosKeyForHistory)
-  // if (recentPositions.length > 4) recentPositions.shift()
+  const currentPosKeyForHistory = posKey(player.x, player.y)
+  recentPositions.push(currentPosKeyForHistory)
+  if (recentPositions.length > 4) recentPositions.shift()
 
-  // // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
+  // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
   // if (
   //   recentPositions.length === 4 &&
   //   recentPositions[0] === recentPositions[2] &&
@@ -558,12 +558,49 @@ export function decideNextAction(state, myUid) {
   if (lastPosition === currentPosKey && lastDecision) {
     decisionCount++
     if (decisionCount >= OSCILLATION_THRESHOLD) {
-      // Keep the same decision to commit to the path
+      console.log(
+        `⚠️ OSCILLATION detected at [${player.x}, ${player.y}] - trying alternative action`,
+      )
+
+      // CRITICAL: Don't commit to same action that caused oscillation!
+      // Try to find a different walkable direction
+      const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+
+      for (const [dx, dy, dir] of DIRS) {
+        // Skip the action that caused oscillation
+        if (dir === lastDecision) continue
+
+        const nx = player.x + dx
+        const ny = player.y + dy
+
+        // Check if walkable and safe
+        if (inBounds(nx, ny) && WALKABLE.includes(map[ny][nx])) {
+          const posKey = `${nx},${ny}`
+          if (!unsafeTiles.has(posKey)) {
+            // Check for bombs
+            const hasBomb = bombs.some((b) => {
+              const { gridX, gridY } = getBombWithGrid(b)
+              return gridX === nx && gridY === ny
+            })
+
+            if (!hasBomb) {
+              console.log(`   ✅ Breaking oscillation with alternative: ${dir} to [${nx}, ${ny}]`)
+              lastPosition = null
+              decisionCount = 0
+              trackDecision(player, dir)
+              return { action: dir }
+            }
+          }
+        }
+      }
+
+      // No alternative found - reset oscillation state and STAY
+      console.log(`   ⚠️ No safe alternatives found - resetting oscillation state and STAYING`)
       lastPosition = null
+      lastDecision = null
       decisionCount = 0
-      const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
-      console.log(`⚠️ OSCILLATION detected — guarded commit: ${guarded}`)
-      return { action: guarded }
+      trackDecision(player, "STAY")
+      return { action: "STAY" }
     }
   } else {
     decisionCount = 0
@@ -1035,7 +1072,7 @@ export function decideNextAction(state, myUid) {
               const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
 
               // Calculate priority score: balance between chest count and distance
-              const priorityScore = chestCount.count * 0.5 - distance
+              const priorityScore = chestCount.count - distance
 
               positionScores.set(key, chestCount.count)
               adjacentTargetsWithScore.push({
