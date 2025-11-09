@@ -285,26 +285,26 @@ export function findWaveSurfingPath(start, bombs, map, bombers, myUid) {
   const startKey = posKey(start.x, start.y)
   const inWave = waveData.has(startKey)
 
-  console.log(`   🌊 Wave Surfing Analysis:`)
-  console.log(`      Bombs: ${bombs.length}`)
-  console.log(`      Wave tiles: ${waveData.size}`)
-  console.log(`      Current position in wave: ${inWave ? "YES" : "NO"}`)
+  // console.log(`   🌊 Wave Surfing Analysis:`)
+  // console.log(`      Bombs: ${bombs.length}`)
+  // console.log(`      Wave tiles: ${waveData.size}`)
+  // console.log(`      Current position in wave: ${inWave ? "YES" : "NO"}`)
 
   if (!inWave) {
     // Not in immediate danger - find proactive surfing positions
     const edges = findWaveEdges(waveData, start, currentSpeed, map)
 
-    console.log(`      Wave edges found: ${edges.length}`)
+    // console.log(`      Wave edges found: ${edges.length}`)
 
     if (edges.length === 0) {
       return null // No surfing opportunities
     }
 
     const bestEdge = edges[0]
-    console.log(`      🏄 Best surfing position: [${bestEdge.x}, ${bestEdge.y}]`)
-    console.log(`         Surfing window: ${(bestEdge.surfingWindow / 1000).toFixed(2)}s`)
-    console.log(`         Distance: ${bestEdge.distanceToEdge} tiles`)
-    console.log(`         Score: ${bestEdge.surfingScore.toFixed(0)}`)
+    // console.log(`      🏄 Best surfing position: [${bestEdge.x}, ${bestEdge.y}]`)
+    // console.log(`         Surfing window: ${(bestEdge.surfingWindow / 1000).toFixed(2)}s`)
+    // console.log(`         Distance: ${bestEdge.distanceToEdge} tiles`)
+    // console.log(`         Score: ${bestEdge.surfingScore.toFixed(0)}`)
 
     return {
       target: { x: bestEdge.x, y: bestEdge.y },
@@ -335,7 +335,7 @@ function findEscapeSurfingPath(start, waveData, currentSpeed, map, bombers, myUi
   const now = Date.now()
   const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
 
-  console.log(`      🚨 In wave zone - finding escape surf path...`)
+  // console.log(`      🚨 In wave zone - finding escape surf path...`)
 
   // BFS to find safe positions, preferring wave edge routes
   const queue = [{ x: start.x, y: start.y, steps: 0, path: [] }]
@@ -406,7 +406,7 @@ function findEscapeSurfingPath(start, waveData, currentSpeed, map, bombers, myUi
   }
 
   if (bestEscapes.length === 0) {
-    console.log(`      ❌ No safe escape surf path found`)
+    // console.log(`      ❌ No safe escape surf path found`)
     return null
   }
 
@@ -414,10 +414,10 @@ function findEscapeSurfingPath(start, waveData, currentSpeed, map, bombers, myUi
   bestEscapes.sort((a, b) => b.score - a.score)
   const best = bestEscapes[0]
 
-  console.log(`      ✅ Escape surf path found: [${best.position.x}, ${best.position.y}]`)
-  console.log(`         Steps: ${best.steps}`)
-  console.log(`         Time to reach: ${(best.timeToReach / 1000).toFixed(2)}s`)
-  console.log(`         Path: ${best.path.join(" → ") || "STAY"}`)
+  // console.log(`      ✅ Escape surf path found: [${best.position.x}, ${best.position.y}]`)
+  // console.log(`         Steps: ${best.steps}`)
+  // console.log(`         Time to reach: ${(best.timeToReach / 1000).toFixed(2)}s`)
+  // console.log(`         Path: ${best.path.join(" → ") || "STAY"}`)
 
   return {
     target: best.position,
