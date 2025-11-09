@@ -29,11 +29,11 @@ export function checkNextPositionTimingSafe({
     return { isSafe: true, blockingBomb: null }
   }
 
-  console.log(
-    `   🔍 ${mode === "escape" ? "Escape" : "Follow"} safety check: Moving to [${nextX},${nextY}]`,
-  )
+  // console.log(
+  //   `   🔍 ${mode === "escape" ? "Escape" : "Follow"} safety check: Moving to [${nextX},${nextY}]`,
+  // )
   if (mode === "follow") {
-    console.log(`      Active bombs: ${bombs.length}`)
+    // console.log(`      Active bombs: ${bombs.length}`)
   }
 
   // Calculate time based on ACTUAL speed
@@ -54,16 +54,16 @@ export function checkNextPositionTimingSafe({
     const inBlastZone = isInBlastZone(nextX, nextY, bomb, range)
 
     if (mode === "follow") {
-      console.log(
-        `      💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms`,
-      )
+      // console.log(
+      //   `      💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms`,
+      // )
     }
 
     if (inBlastZone) {
       const timeNeeded = timeToWalk + SAFETY_BUFFER
-      console.log(
-        `      ${mode === "follow" ? "   " : ""}💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms (need ${timeNeeded.toFixed(0)}ms @ speed ${myBomber.speed})`,
-      )
+      // console.log(
+      //   `      ${mode === "follow" ? "   " : ""}💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms (need ${timeNeeded.toFixed(0)}ms @ speed ${myBomber.speed})`,
+      // )
 
       if (timeLeft < timeNeeded) {
         isSafe = false

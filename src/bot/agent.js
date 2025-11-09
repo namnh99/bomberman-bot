@@ -78,9 +78,9 @@ function isRecentlyVisited(x, y) {
 function trackEscape(fromX, fromY) {
   lastEscapeFromPosition = posKey(fromX, fromY)
   lastEscapeTime = Date.now()
-  console.log(
-    `   📌 Tracking escape from [${fromX}, ${fromY}] - won't return for ${ESCAPE_COOLDOWN_MS}ms`,
-  )
+  // console.log(
+  //   `   📌 Tracking escape from [${fromX}, ${fromY}] - won't return for ${ESCAPE_COOLDOWN_MS}ms`,
+  // )
 }
 
 function isRecentEscapePosition(x, y) {
@@ -101,7 +101,7 @@ function canBombAtPosition(x, y) {
 
   if (lastBombPosition === positionKey && now - lastBombTime < BOMB_PLACEMENT_COOLDOWN_MS) {
     const timeLeft = ((BOMB_PLACEMENT_COOLDOWN_MS - (now - lastBombTime)) / 1000).toFixed(1)
-    console.log(`   ⏳ Bomb cooldown at [${x}, ${y}] - ${timeLeft}s remaining`)
+    // console.log(`   ⏳ Bomb cooldown at [${x}, ${y}] - ${timeLeft}s remaining`)
     return false
   }
 
@@ -111,7 +111,7 @@ function canBombAtPosition(x, y) {
 function recordBombPlacement(x, y) {
   lastBombPosition = posKey(x, y)
   lastBombTime = Date.now()
-  console.log(`   ✅ Recorded bomb placement at [${x}, ${y}]`)
+  // console.log(`   ✅ Recorded bomb placement at [${x}, ${y}]`)
 }
 
 // Prevent immediate backtracking: if action would move back to lastPosition,
@@ -123,7 +123,7 @@ function applyBacktrackGuard(action, player, map, bombs, bombers) {
 
   // Don't apply backtrack guard when following a planned path
   if (isFollowingPath) {
-    console.log(`   ⏭️ Following planned path, skipping backtrack guard`)
+    // console.log(`   ⏭️ Following planned path, skipping backtrack guard`)
     return action
   }
 
@@ -150,7 +150,7 @@ function applyBacktrackGuard(action, player, map, bombs, bombers) {
 
     // CRITICAL: Check if this direction leads into danger
     if (unsafeTiles.has(posKey(nx, ny))) {
-      console.log(`   ⚠️ Backtrack guard: ${dir} leads to unsafe tile [${nx},${ny}] - skipping`)
+      // console.log(`   ⚠️ Backtrack guard: ${dir} leads to unsafe tile [${nx},${ny}] - skipping`)
       continue
     }
 
@@ -164,11 +164,11 @@ function applyBacktrackGuard(action, player, map, bombs, bombers) {
     // avoid moving back to lastPosition
     if (posKey(nx, ny) === lastPosition) continue
 
-    console.log(`   ✅ Backtrack guard: Found safe alternative ${dir} to [${nx},${ny}]`)
+    // console.log(`   ✅ Backtrack guard: Found safe alternative ${dir} to [${nx},${ny}]`)
     return dir
   }
 
-  console.log(`   ⚠️ Backtrack guard: No safe alternatives found`)
+  // console.log(`   ⚠️ Backtrack guard: No safe alternatives found`)
   return "STAY"
 }
 
@@ -180,28 +180,28 @@ function handleTarget(result, state, myUid) {
   const myBomber = bombers && bombers.find((b) => b.uid === myUid)
   const player = toGridCoords(myBomber.x, myBomber.y)
 
-  console.log(`   Path: ${result.path.join(" → ")} (${result?.path?.length} steps)`)
-  console.log(`   Walls blocking: ${result?.walls?.length}`)
+  // console.log(`   Path: ${result.path.join(" → ")} (${result?.path?.length} steps)`)
+  // console.log(`   Walls blocking: ${result?.walls?.length}`)
 
   // If path is blocked by a chest, handle it
   if (result?.walls?.length > 0) {
     const targetWall = result.walls[0]
-    console.log(`   First blocking wall at: [${targetWall.x}, ${targetWall.y}]`)
+    // console.log(`   First blocking wall at: [${targetWall.x}, ${targetWall.y}]`)
 
     if (isAdjacent(targetWall.x, targetWall.y, player.x, player.y)) {
-      console.log("   🧱 Chest is adjacent! Considering bombing...")
+      // console.log("   🧱 Chest is adjacent! Considering bombing...")
 
       // CRITICAL: Use server's bomb placement logic to predict where bomb will be placed
       const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
-      console.log(
-        `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
-      )
+      // console.log(
+      //   `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+      // )
 
       // Check bombing cooldown at bomb position
       if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-        console.log("   ⏳ Skipping - cooldown active at this position")
-        console.log("🎯 DECISION: STAY (Bomb cooldown)")
-        console.log("=".repeat(60) + "\n")
+        // console.log("   ⏳ Skipping - cooldown active at this position")
+        // console.log("🎯 DECISION: STAY (Bomb cooldown)")
+        // console.log("=".repeat(60) + "\n")
         return { action: "STAY" }
       }
 
@@ -213,12 +213,12 @@ function handleTarget(result, state, myUid) {
         myBomber.explosionRange,
       )
       if (itemCheck.willDestroyItems) {
-        console.log(
-          `   ⚠️ Bombing would destroy ${itemCheck.items.length} item(s):`,
-          itemCheck.items.map((i) => `${i.type} at [${i.x},${i.y}]`).join(", "),
-        )
-        console.log("   🎯 DECISION: STAY (Avoiding item destruction)")
-        console.log("=".repeat(60) + "\n")
+        // console.log(
+        //   `   ⚠️ Bombing would destroy ${itemCheck.items.length} item(s):`,
+        //   itemCheck.items.map((i) => `${i.type} at [${i.x},${i.y}]`).join(", "),
+        // )
+        // console.log("   🎯 DECISION: STAY (Avoiding item destruction)")
+        // console.log("=".repeat(60) + "\n")
         return { action: "STAY" }
       }
 
@@ -229,38 +229,38 @@ function handleTarget(result, state, myUid) {
         map,
         myBomber.explosionRange,
       )
-      console.log(
-        `   💣 Bomb would destroy ${chestCount.count} chest(s):`,
-        chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
-      )
+      // console.log(
+      //   `   💣 Bomb would destroy ${chestCount.count} chest(s):`,
+      //   chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
+      // )
 
       // CRITICAL SAFETY CHECK: Validate bomb safety BEFORE placing
       const validation = validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid)
 
       if (!validation.canBomb) {
-        console.log(
-          `   ❌ BOMB VALIDATION FAILED: ${validation.reason} - REFUSING TO BOMB (suicide prevention)`,
-        )
+        // console.log(
+        //   `   ❌ BOMB VALIDATION FAILED: ${validation.reason} - REFUSING TO BOMB (suicide prevention)`,
+        // )
         if (validation.escapeTime && validation.availableTime) {
-          console.log(
-            `      Need ${validation.escapeTime.toFixed(0)}ms but only ${validation.availableTime.toFixed(0)}ms available`,
-          )
+          // console.log(
+          //   `      Need ${validation.escapeTime.toFixed(0)}ms but only ${validation.availableTime.toFixed(0)}ms available`,
+          // )
         }
         // Continue to next phase instead of bombing
-        console.log("=".repeat(60) + "\n")
+        // console.log("=".repeat(60) + "\n")
       } else {
-        console.log(
-          `   ✅ BOMB VALIDATED: Safe to bomb with escape path: ${validation.escapePath.join(" → ")}`,
-        )
-        console.log(
-          `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} blocking chest${chestCount.count > 1 ? "s" : ""})`,
-        )
-        console.log(
-          "   💣 Bombing from",
-          `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
-        )
-        console.log("   🏃 Escape action:", validation.escapeAction)
-        console.log("=".repeat(60) + "\n")
+        // console.log(
+        //   `   ✅ BOMB VALIDATED: Safe to bomb with escape path: ${validation.escapePath.join(" → ")}`,
+        // )
+        // console.log(
+        //   `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} blocking chest${chestCount.count > 1 ? "s" : ""})`,
+        // )
+        // console.log(
+        //   "   💣 Bombing from",
+        //   `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+        // )
+        // console.log("   🏃 Escape action:", validation.escapeAction)
+        // console.log("=".repeat(60) + "\n")
 
         if (myBomber.bombCount > 0) {
           // Record bomb placement to prevent spam (using actual bomb position)
@@ -276,7 +276,7 @@ function handleTarget(result, state, myUid) {
         }
       }
     } else {
-      console.log(`   Wall not adjacent, need to move closer first`)
+      // console.log(`   Wall not adjacent, need to move closer first`)
     }
     // If we didn't bomb, continue to other logic below
   } else {
@@ -308,24 +308,24 @@ function handleTarget(result, state, myUid) {
       const destKey = `${destX},${destY}`
 
       if (unsafeTiles.has(destKey)) {
-        console.log(
-          `   ⚠️ SAFETY OVERRIDE: Destination [${destX},${destY}] is in blast zone of imminent bomb!`,
-        )
+        // console.log(
+        //   `   ⚠️ SAFETY OVERRIDE: Destination [${destX},${destY}] is in blast zone of imminent bomb!`,
+        // )
         imminentBombs.forEach((b) => {
           const { gridX, gridY } = getBombWithGrid(b)
           const timeLeft = getTimeUntilExplosion(b)
-          console.log(`      💣 Bomb at [${gridX},${gridY}] explodes in ${timeLeft.toFixed(0)}ms`)
+          // console.log(`      💣 Bomb at [${gridX},${gridY}] explodes in ${timeLeft.toFixed(0)}ms`)
         })
-        console.log(`   🚫 REFUSING dangerous move - will explore instead`)
-        console.log("=".repeat(60) + "\n")
+        // console.log(`   🚫 REFUSING dangerous move - will explore instead`)
+        // console.log("=".repeat(60) + "\n")
         // Don't return - let it fall through to exploration phase
         return null
       }
     }
 
-    console.log("🎯 DECISION: MOVE (towards target)")
-    console.log("   Action:", result.path[0])
-    console.log("=".repeat(60) + "\n")
+    // console.log("🎯 DECISION: MOVE (towards target)")
+    // console.log("   Action:", result.path[0])
+    // console.log("=".repeat(60) + "\n")
     trackDecision(player, result.path[0])
     // Return the full path so the client can follow the entire route and avoid local oscillation
     return {
@@ -338,7 +338,7 @@ function handleTarget(result, state, myUid) {
   // SPECIAL CASE: Already at target bombing position (path.length === 0, no walls blocking)
   // This happens when player is at an optimal chest bombing position OR at an item position
   if (result.path.length === 0 && result.walls.length === 0) {
-    console.log("   💡 Already at target position!")
+    // console.log("   💡 Already at target position!")
 
     // PRIORITY: Check if we're standing on an item tile
     const currentTile = map[player.y] && map[player.y][player.x]
@@ -346,7 +346,7 @@ function handleTarget(result, state, myUid) {
 
     if (isOnItemTile) {
       // Standing on item - move away to collect, don't try to bomb
-      console.log(`   📦 Standing on item tile (${currentTile}), moving away to collect`)
+      // console.log(`   📦 Standing on item tile (${currentTile}), moving away to collect`)
 
       // Try to find a walkable adjacent tile
       for (const [dx, dy, dir] of DIRS) {
@@ -360,26 +360,26 @@ function handleTarget(result, state, myUid) {
           })
 
           if (!hasBomb) {
-            console.log(`   ➡️ Moving ${dir} to collect item`)
-            console.log("🎯 DECISION: MOVE (collect item)")
-            console.log("=".repeat(60) + "\n")
+            // console.log(`   ➡️ Moving ${dir} to collect item`)
+            // console.log("🎯 DECISION: MOVE (collect item)")
+            // console.log("=".repeat(60) + "\n")
             trackDecision(player, dir)
             return { action: dir }
           }
         }
       }
 
-      console.log("   ⚠️ No walkable adjacent tiles, staying")
-      console.log("🎯 DECISION: STAY (No escape from item)")
-      console.log("=".repeat(60) + "\n")
+      // console.log("   ⚠️ No walkable adjacent tiles, staying")
+      // console.log("🎯 DECISION: STAY (No escape from item)")
+      // console.log("=".repeat(60) + "\n")
       return { action: "STAY" }
     }
 
     // CRITICAL: Use server's bomb placement logic to predict where bomb will be placed
     const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
-    console.log(
-      `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
-    )
+    // console.log(
+    //   `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+    // )
 
     // Check if there are chests adjacent to bomb position (not player position!)
     const chestCount = countChestsDestroyedByBomb(
@@ -390,16 +390,16 @@ function handleTarget(result, state, myUid) {
     )
 
     if (chestCount.count > 0 && myBomber.bombCount > 0) {
-      console.log(
-        `   💣 Can destroy ${chestCount.count} chest(s):`,
-        chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
-      )
+      // console.log(
+      //   `   💣 Can destroy ${chestCount.count} chest(s):`,
+      //   chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
+      // )
 
       // Check bombing cooldown (using bomb position, not player position)
       if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-        console.log("   ⏳ Bomb cooldown active, waiting...")
-        console.log("🎯 DECISION: STAY (Cooldown)")
-        console.log("=".repeat(60) + "\n")
+        // console.log("   ⏳ Bomb cooldown active, waiting...")
+        // console.log("🎯 DECISION: STAY (Cooldown)")
+        // console.log("=".repeat(60) + "\n")
         return { action: "STAY" }
       }
 
@@ -411,12 +411,12 @@ function handleTarget(result, state, myUid) {
         myBomber.explosionRange,
       )
       if (itemCheck.willDestroyItems) {
-        console.log(`   ⚠️ Would destroy ${itemCheck.items.length} item(s), skipping bomb`)
-        console.log(`   🚶 Moving away to avoid destroying items`)
+        // console.log(`   ⚠️ Would destroy ${itemCheck.items.length} item(s), skipping bomb`)
+        // console.log(`   🚶 Moving away to avoid destroying items`)
 
         // Don't stay here - return null to let main function continue to PHASE 6
-        console.log("🎯 DECISION: (Will explore instead of staying)")
-        console.log("=".repeat(60) + "\n")
+        // console.log("🎯 DECISION: (Will explore instead of staying)")
+        // console.log("=".repeat(60) + "\n")
         return null // Signal to continue to exploration phase
       } else {
         // Only proceed with bombing if we won't destroy items
@@ -466,23 +466,23 @@ function handleTarget(result, state, myUid) {
             )
 
             if (!secondEscapePath) {
-              console.log(
-                `   ⚠️ Escape destination [${destX}, ${destY}] leads to DEADLOCK - cannot bomb safely`,
-              )
-              console.log(`      (Can escape immediate bomb, but will be trapped by other bombs)`)
+              // console.log(
+              //   `   ⚠️ Escape destination [${destX}, ${destY}] leads to DEADLOCK - cannot bomb safely`,
+              // )
+              // console.log(`      (Can escape immediate bomb, but will be trapped by other bombs)`)
             } else {
-              console.log(
-                `   ✅ Canz escape: ${escapePath.path.join(" → ")} to [${destX}, ${destY}]`,
-              )
-              console.log(
-                `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
-              )
-              console.log(
-                "   💣 Bombing from grid position",
-                `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
-              )
-              console.log("   🏃 Escape action:", escapePath.path[0])
-              console.log("=".repeat(60) + "\n")
+              // console.log(
+              //   `   ✅ Canz escape: ${escapePath.path.join(" → ")} to [${destX}, ${destY}]`,
+              // )
+              // console.log(
+              //   `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
+              // )
+              // console.log(
+              //   "   💣 Bombing from grid position",
+              //   `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+              // )
+              // console.log("   🏃 Escape action:", escapePath.path[0])
+              // console.log("=".repeat(60) + "\n")
 
               recordBombPlacement(bombPos.x, bombPos.y)
 
@@ -495,10 +495,10 @@ function handleTarget(result, state, myUid) {
               }
             }
           } else {
-            console.log(`   ❌ No escape path, cannot bomb safely`)
+            // console.log(`   ❌ No escape path, cannot bomb safely`)
           }
         } else {
-          console.log(`   ❌ No safe tiles after bombing`)
+          // console.log(`   ❌ No safe tiles after bombing`)
         }
       } // End of else block - only bomb if won't destroy items
     }
@@ -506,8 +506,8 @@ function handleTarget(result, state, myUid) {
     // Return null to let main function continue to exploration
   }
 
-  console.log("   ℹ️ No valid bomb action at current position")
-  console.log("=".repeat(60) + "\n")
+  // console.log("   ℹ️ No valid bomb action at current position")
+  // console.log("=".repeat(60) + "\n")
   // Don't STAY - return null to continue to exploration phase
   return null
 }
@@ -542,12 +542,12 @@ export function decideNextAction(state, myUid) {
   //   recentPositions[1] === recentPositions[3] &&
   //   recentPositions[0] !== recentPositions[1]
   // ) {
-  //   console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
+    console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
   //   recentPositions = [] // reset history so we don't continuously trigger
   //   if (lastDecision) {
-  //     console.log(`   Returning previous decision to commit: ${lastDecision}`)
+      console.log(`   Returning previous decision to commit: ${lastDecision}`)
   //     const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
-  //     console.log(`   Guarded decision: ${guarded}`)
+      console.log(`   Guarded decision: ${guarded}`)
   //     return { action: guarded }
   //   }
   //   return { action: "STAY" }
@@ -558,9 +558,9 @@ export function decideNextAction(state, myUid) {
   if (lastPosition === currentPosKey && lastDecision) {
     decisionCount++
     if (decisionCount >= OSCILLATION_THRESHOLD) {
-      console.log(
-        `⚠️ OSCILLATION detected at [${player.x}, ${player.y}] - trying alternative action`,
-      )
+      // console.log(
+      //   `⚠️ OSCILLATION detected at [${player.x}, ${player.y}] - trying alternative action`,
+      // )
 
       // CRITICAL: Don't commit to same action that caused oscillation!
       // Try to find a different walkable direction
@@ -584,7 +584,7 @@ export function decideNextAction(state, myUid) {
             })
 
             if (!hasBomb) {
-              console.log(`   ✅ Breaking oscillation with alternative: ${dir} to [${nx}, ${ny}]`)
+              // console.log(`   ✅ Breaking oscillation with alternative: ${dir} to [${nx}, ${ny}]`)
               lastPosition = null
               decisionCount = 0
               trackDecision(player, dir)
@@ -595,7 +595,7 @@ export function decideNextAction(state, myUid) {
       }
 
       // No alternative found - reset oscillation state and STAY
-      console.log(`   ⚠️ No safe alternatives found - resetting oscillation state and STAYING`)
+      // console.log(`   ⚠️ No safe alternatives found - resetting oscillation state and STAYING`)
       lastPosition = null
       lastDecision = null
       decisionCount = 0
@@ -606,20 +606,20 @@ export function decideNextAction(state, myUid) {
     decisionCount = 0
   }
 
-  console.log("💣 Active (non-exploded) Bombs:", bombs.length)
+  // console.log("💣 Active (non-exploded) Bombs:", bombs.length)
   if (bombs.length > 0) {
-    console.log("   Bomb positions:")
+    // console.log("   Bomb positions:")
     bombs.forEach((b, i) => {
       const { gridX, gridY } = getBombWithGrid(b)
-      console.log(
-        `   Bomb ${i + 1}: [${gridX}, ${gridY}] | owner: ${b.uid === myUid ? "ME" : b.uid}`,
-      )
+      // console.log(
+      //   `   Bomb ${i + 1}: [${gridX}, ${gridY}] | owner: ${b.uid === myUid ? "ME" : b.uid}`,
+      // )
     })
   }
-  // console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
+  console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
 
   // PHASE 0: Game Context Analysis
-  console.log("\n🔍 PHASE 0: Game Context Analysis")
+  // console.log("\n🔍 PHASE 0: Game Context Analysis")
   const enemies = findAllEnemies(bombers, myUid)
   const allItems = findAllItems(map, bombs, bombers, false)
   const allChests = findAllChests(map, bombs, bombers, false)
@@ -631,15 +631,15 @@ export function decideNextAction(state, myUid) {
     chestCount: allChests.length,
   })
 
-  console.log(`   Game Phase: ${gamePhase.toUpperCase()}`)
-  console.log(`   Risk Tolerance: ${(riskTolerance * 100).toFixed(0)}%`)
-  console.log(`   Strategy: ${fightOrFlee.toUpperCase()}`)
-  console.log(
-    `   Enemies: ${enemies.length} | Items: ${allItems.length} | Chests: ${allChests.length}`,
-  )
+  // console.log(`   Game Phase: ${gamePhase.toUpperCase()}`)
+  // console.log(`   Risk Tolerance: ${(riskTolerance * 100).toFixed(0)}%`)
+  // console.log(`   Strategy: ${fightOrFlee.toUpperCase()}`)
+  // console.log(
+  //   `   Enemies: ${enemies.length} | Items: ${allItems.length} | Chests: ${allChests.length}`,
+  // )
 
   // PHASE 1: Safety Check
-  console.log("\n🔍 PHASE 1: Safety Check")
+  // console.log("\n🔍 PHASE 1: Safety Check")
   const { isPlayerSafe, safeTiles } = checkSafety(map, player, bombs, bombers, myBomber)
 
   // CRITICAL: Check staged escape EVEN WHEN SAFE for multi-bomb scenarios
@@ -654,21 +654,21 @@ export function decideNextAction(state, myUid) {
   })
 
   if (relevantBombs.length >= 2) {
-    console.log(
-      `   🕐 Multi-bomb scenario detected (${relevantBombs.length} nearby bombs out of ${bombs.length} total) - checking staged escape`,
-    )
+    // console.log(
+    //   `   🕐 Multi-bomb scenario detected (${relevantBombs.length} nearby bombs out of ${bombs.length} total) - checking staged escape`,
+    // )
 
     // Check if staying in place is the best option
     const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
 
     if (waitStrategy && waitStrategy.isStayingInPlace) {
       // STAY is the best option - current position safe from fastest bomb
-      console.log(`   💡 STAGED ESCAPE: STAY at [${player.x}, ${player.y}]`)
-      console.log(`      ${waitStrategy.reason}`)
-      console.log(`      ⏱️  Wait time: ${(waitStrategy.waitTime / 1000).toFixed(1)}s`)
-      console.log(`      Current safety: ${isPlayerSafe ? "SAFE" : "UNSAFE"}`)
-      console.log(`🎯 DECISION: STAGED WAIT (stay and let bombs explode)`)
-      console.log("=".repeat(90) + "\n")
+      // console.log(`   💡 STAGED ESCAPE: STAY at [${player.x}, ${player.y}]`)
+      // console.log(`      ${waitStrategy.reason}`)
+      // console.log(`      ⏱️  Wait time: ${(waitStrategy.waitTime / 1000).toFixed(1)}s`)
+      // console.log(`      Current safety: ${isPlayerSafe ? "SAFE" : "UNSAFE"}`)
+      // console.log(`🎯 DECISION: STAGED WAIT (stay and let bombs explode)`)
+      // console.log("=".repeat(90) + "\n")
       trackDecision(player, "STAY")
       if (!isPlayerSafe) trackEscape(player.x, player.y)
       return {
@@ -690,16 +690,16 @@ export function decideNextAction(state, myUid) {
       return escapeResult
     }
 
-    console.log("   ❌ No escape possible! Bracing for impact.")
-    console.log("🎯 DECISION: STAY (No escape)")
-    console.log("=".repeat(90) + "\n")
+    // console.log("   ❌ No escape possible! Bracing for impact.")
+    // console.log("🎯 DECISION: STAY (No escape)")
+    // console.log("=".repeat(90) + "\n")
     trackDecision(player, "STAY")
     return { action: "STAY" }
   }
 
   // PHASE 1.5: Enemy Trap Detection (if aggressive) (REFACTORED)
   if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
-    console.log("\n🔍 PHASE 1.5: Enemy Trap Detection")
+    // console.log("\n🔍 PHASE 1.5: Enemy Trap Detection")
 
     // Use unified enemy bombing system for trap detection
     const trapResult = decideEnemyBombing({
@@ -724,7 +724,7 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 1.6: Chain Reaction Detection
   if (bombs.length > 0 && myBomber.bombCount > 0 && riskTolerance > 0.5) {
-    console.log("\n🔍 PHASE 1.6: Chain Reaction Detection")
+    // console.log("\n🔍 PHASE 1.6: Chain Reaction Detection")
     const chainOpportunities = findChainReactionOpportunities(
       player,
       map,
@@ -736,18 +736,18 @@ export function decideNextAction(state, myUid) {
 
     if (chainOpportunities.length > 0) {
       const bestChain = chainOpportunities[0]
-      console.log(`   💥 CHAIN REACTION POSSIBLE! Triggers: ${bestChain.triggeredBombs} bombs`)
-      console.log(
-        `   Chests: ${bestChain.chestsDestroyed} | Total Destruction: ${bestChain.totalDestruction}`,
-      )
+      // console.log(`   💥 CHAIN REACTION POSSIBLE! Triggers: ${bestChain.triggeredBombs} bombs`)
+      // console.log(
+      //   `   Chests: ${bestChain.chestsDestroyed} | Total Destruction: ${bestChain.totalDestruction}`,
+      // )
 
       if (isChainReactionWorthwhile(bestChain, riskTolerance)) {
         const validation = validateBombSafety(bestChain, map, bombs, bombers, myBomber, myUid)
 
         if (validation.canBomb && bestChain.distance === 0) {
-          console.log(`   🔥 Triggering chain reaction!`)
-          console.log(`🎯 DECISION: BOMB (Chain Reaction)`)
-          console.log("=".repeat(90) + "\n")
+          // console.log(`   🔥 Triggering chain reaction!`)
+          // console.log(`🎯 DECISION: BOMB (Chain Reaction)`)
+          // console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
           return {
             action: "BOMB",
@@ -763,7 +763,7 @@ export function decideNextAction(state, myUid) {
   // PHASE 1.7: Aggressive Enemy Pursuit (HIGH PRIORITY - before items/chests) (REFACTORED)
   // This phase runs BEFORE item/chest collection to prioritize combat
   if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
-    console.log("\n🔍 PHASE 1.7: Aggressive Enemy Pursuit (Priority)")
+    // console.log("\n🔍 PHASE 1.7: Aggressive Enemy Pursuit (Priority)")
 
     // Use unified enemy bombing system for priority pursuit
     const priorityPursuitResult = decideEnemyBombing({
@@ -785,13 +785,13 @@ export function decideNextAction(state, myUid) {
       return priorityPursuitResult
     }
 
-    console.log(`   ℹ️ No priority pursuit opportunities found`)
+    // console.log(`   ℹ️ No priority pursuit opportunities found`)
   }
 
   // PHASE 2: Dynamic Item Prioritization
-  console.log(`\n🔍 PHASE 2: Dynamic Item Prioritization`)
+  // console.log(`\n🔍 PHASE 2: Dynamic Item Prioritization`)
   const items = findAllItems(map, bombs, bombers)
-  console.log(`   Items found: ${items.length}`)
+  // console.log(`   Items found: ${items.length}`)
 
   // CRITICAL: Classify items by danger level instead of filtering completely
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
@@ -825,18 +825,18 @@ export function decideNextAction(state, myUid) {
     // ANTI-OSCILLATION: Filter items at recently escaped position
     const isRecentEscape = isRecentEscapePosition(item.x, item.y)
     if (isRecentEscape) {
-      console.log(
-        `   🚫 Filtering out item at recent escape position: ${item.type} at [${item.x},${item.y}] (anti-oscillation)`,
-      )
+      // console.log(
+      //   `   🚫 Filtering out item at recent escape position: ${item.type} at [${item.x},${item.y}] (anti-oscillation)`,
+      // )
       return false
     }
 
     // ANTI-PING-PONG: Filter items at recently visited positions
     const wasRecentlyVisited = isRecentlyVisited(item.x, item.y)
     if (wasRecentlyVisited) {
-      console.log(
-        `   🔄 Filtering out item at recently visited position: ${item.type} at [${item.x},${item.y}] (anti-ping-pong)`,
-      )
+      // console.log(
+      //   `   🔄 Filtering out item at recently visited position: ${item.type} at [${item.x},${item.y}] (anti-ping-pong)`,
+      // )
       return false
     }
 
@@ -847,18 +847,18 @@ export function decideNextAction(state, myUid) {
   // Log dangerous items separately
   const dangerousItems = accessibleItems.filter((item) => item.isInBlastZone)
   if (dangerousItems.length > 0) {
-    console.log(`   ⚠️ ${dangerousItems.length} item(s) in blast zones - will check timing:`)
+    // console.log(`   ⚠️ ${dangerousItems.length} item(s) in blast zones - will check timing:`)
     dangerousItems.forEach((item) => {
-      console.log(
-        `      ${item.type} at [${item.x},${item.y}] - ${(item.timeUntilDanger / 1000).toFixed(1)}s until explosion`,
-      )
+      // console.log(
+      //   `      ${item.type} at [${item.x},${item.y}] - ${(item.timeUntilDanger / 1000).toFixed(1)}s until explosion`,
+      // )
     })
   }
 
   if (accessibleItems.length < items.length) {
-    console.log(
-      `   🛡️ Filtered: ${items.length} total → ${accessibleItems.length} accessible items`,
-    )
+    // console.log(
+    //   `   🛡️ Filtered: ${items.length} total → ${accessibleItems.length} accessible items`,
+    // )
   }
 
   // Apply dynamic prioritization to accessible items
@@ -878,12 +878,12 @@ export function decideNextAction(state, myUid) {
     .sort((a, b) => b.finalValue - a.finalValue)
 
   if (prioritizedItems.length > 0) {
-    console.log(`   Top 3 prioritized items:`)
+    // console.log(`   Top 3 prioritized items:`)
     prioritizedItems.slice(0, 3).forEach((pi, idx) => {
       const riskTag = pi.item.isInBlastZone ? " 🔥 RISKY" : ""
-      console.log(
-        `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)}${riskTag}`,
-      )
+      // console.log(
+      //   `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)}${riskTag}`,
+      // )
     })
   }
 
@@ -895,41 +895,41 @@ export function decideNextAction(state, myUid) {
 
     if (multiStrategy) {
       if (multiStrategy.strategy === "multi") {
-        console.log(
-          `   ✅ Multi-target path: ${multiStrategy.path.targetCount} items, efficiency: ${multiStrategy.path.efficiency.toFixed(2)}`,
-        )
+        // console.log(
+        //   `   ✅ Multi-target path: ${multiStrategy.path.targetCount} items, efficiency: ${multiStrategy.path.efficiency.toFixed(2)}`,
+        // )
         itemResult = {
           path: multiStrategy.path.totalPath,
           isMultiTarget: true,
           targets: multiStrategy.path.targetCount,
         }
       } else {
-        console.log(`   ✅ Single-target path: ${multiStrategy.path.path.join(" → ")}`)
+        // console.log(`   ✅ Single-target path: ${multiStrategy.path.path.join(" → ")}`)
         itemResult = multiStrategy.path
       }
     }
   }
 
   if (itemResult) {
-    console.log(
-      `   ✅ Path to item(s): ${itemResult.path.slice(0, 5).join(" → ")} (${itemResult.path.length} steps)`,
-    )
+    // console.log(
+    //   `   ✅ Path to item(s): ${itemResult.path.slice(0, 5).join(" → ")} (${itemResult.path.length} steps)`,
+    // )
   } else if (items.length > 0) {
-    console.log(`   ❌ No path to items found`)
+    // console.log(`   ❌ No path to items found`)
   }
 
   // PHASE 3: Find Chests
-  console.log(`\n🔍 PHASE 3: Chest Bombing`)
+  // console.log(`\n🔍 PHASE 3: Chest Bombing`)
   const chests = findAllChests(map, bombs, bombers)
-  console.log(`   Chests found: ${chests.length}`)
+  // console.log(`   Chests found: ${chests.length}`)
   if (chests.length > 0) {
-    console.log(
-      `   Chest locations:`,
-      chests
-        .slice(0, 3)
-        .map((c) => `[${c.x},${c.y}]`)
-        .join(", "),
-    )
+    // console.log(
+    //   `   Chest locations:`,
+    //   chests
+    //     .slice(0, 3)
+    //     .map((c) => `[${c.x},${c.y}]`)
+    //     .join(", "),
+    // )
   }
 
   let chestResult = null
@@ -937,22 +937,22 @@ export function decideNextAction(state, myUid) {
     // Check if adjacent to a chest
     const adjacentChest = chests.find((c) => isAdjacent(c.x, c.y, player.x, player.y))
     if (adjacentChest) {
-      console.log(`\n🔍 PHASE 3: Adjacent Chest Bombing`)
+      // console.log(`\n🔍 PHASE 3: Adjacent Chest Bombing`)
 
       // Verify chest still exists in map (not already destroyed)
       const chestCell = map[adjacentChest.y] && map[adjacentChest.y][adjacentChest.x]
       if (chestCell !== "C") {
-        console.log(
-          `   ⚠️ Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}] already destroyed, skipping`,
-        )
+        // console.log(
+        //   `   ⚠️ Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}] already destroyed, skipping`,
+        // )
       } else {
-        console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
+        // console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
 
         // CRITICAL: Use server's bomb placement logic
         const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
-        console.log(
-          `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
-        )
+        // console.log(
+        //   `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
+        // )
 
         const bombAlreadyHere = bombs.some((bomb) => {
           const { gridX, gridY } = getBombWithGrid(bomb)
@@ -960,9 +960,9 @@ export function decideNextAction(state, myUid) {
         })
 
         if (bombAlreadyHere) {
-          console.log(
-            `   ⏸️  Bomb already exists at [${bombPos.x}, ${bombPos.y}], escaping instead`,
-          )
+          // console.log(
+          //   `   ⏸️  Bomb already exists at [${bombPos.x}, ${bombPos.y}], escaping instead`,
+          // )
           const escapePath = findShortestEscapePath(map, player, bombs, bombers, myBomber)
           if (escapePath && escapePath.path.length > 0) {
             return {
@@ -983,13 +983,13 @@ export function decideNextAction(state, myUid) {
             myBomber.explosionRange,
           )
           if (itemCheck.willDestroyItems) {
-            console.log(
-              `   ⚠️ Bombing would destroy ${itemCheck.items.length} item(s):`,
-              itemCheck.items.map((i) => `${i.type} at [${i.x},${i.y}]`).join(", "),
-            )
-            console.log(
-              "   ⚠️ Skipping adjacent chest bomb (would destroy items, will prioritize item in Phase 4)",
-            )
+            // console.log(
+            //   `   ⚠️ Bombing would destroy ${itemCheck.items.length} item(s):`,
+            //   itemCheck.items.map((i) => `${i.type} at [${i.x},${i.y}]`).join(", "),
+            // )
+            // console.log(
+            //   "   ⚠️ Skipping adjacent chest bomb (would destroy items, will prioritize item in Phase 4)",
+            // )
             // Don't return here - continue to Phase 4 where item will be prioritized
           } else {
             // Use validateBombSafety for comprehensive bomb validation
@@ -1002,20 +1002,20 @@ export function decideNextAction(state, myUid) {
                 map,
                 myBomber.explosionRange,
               )
-              console.log(
-                `   💣 Bomb would destroy ${chestCount.count} chest(s):`,
-                chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
-              )
-              console.log(`   ✅ Bomb safety validated: ${validation.reason}`)
-              console.log(
-                `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
-              )
-              console.log(
-                "   💣 Bombing from grid",
-                `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
-              )
-              console.log("   🏃 Escape action:", validation.escapeAction)
-              console.log("=".repeat(90) + "\n")
+              // console.log(
+              //   `   💣 Bomb would destroy ${chestCount.count} chest(s):`,
+              //   chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
+              // )
+              // console.log(`   ✅ Bomb safety validated: ${validation.reason}`)
+              // console.log(
+              //   `🎯 DECISION: BOMB + ESCAPE (${chestCount.count} chest${chestCount.count > 1 ? "s" : ""})`,
+              // )
+              // console.log(
+              //   "   💣 Bombing from grid",
+              //   `[${player.x}, ${player.y}], bomb at [${bombPos.x}, ${bombPos.y}]`,
+              // )
+              // console.log("   🏃 Escape action:", validation.escapeAction)
+              // console.log("=".repeat(90) + "\n")
 
               return {
                 action: "BOMB",
@@ -1025,16 +1025,16 @@ export function decideNextAction(state, myUid) {
                 fullPathCoordinates: validation.escapeCoordinates || [],
               }
             } else {
-              console.log(`   ❌ BOMB VALIDATION FAILED: ${validation.reason}`)
+              // console.log(`   ❌ BOMB VALIDATION FAILED: ${validation.reason}`)
               if (validation.escapeTime && validation.availableTime) {
-                console.log(
-                  `      Need ${validation.escapeTime.toFixed(0)}ms but only ${validation.availableTime.toFixed(0)}ms available`,
-                )
+                // console.log(
+                //   `      Need ${validation.escapeTime.toFixed(0)}ms but only ${validation.availableTime.toFixed(0)}ms available`,
+                // )
               }
             }
           }
         } else {
-          console.log(`   ❌ No bombs available`)
+          // console.log(`   ❌ No bombs available`)
         }
       } // Close the chestCell === "C" check
 
@@ -1058,9 +1058,9 @@ export function decideNextAction(state, myUid) {
           })
 
           if (hasBomb) {
-            console.log(
-              `   ⛔ Skipping adjacent target [${adjX},${adjY}] because it has an active bomb`,
-            )
+            // console.log(
+            //   `   ⛔ Skipping adjacent target [${adjX},${adjY}] because it has an active bomb`,
+            // )
           } else {
             if (!positionScores.has(key)) {
               const chestCount = countChestsDestroyedByBomb(
@@ -1092,11 +1092,11 @@ export function decideNextAction(state, myUid) {
     // Higher score = better target (more chests, closer distance)
     adjacentTargetsWithScore.sort((a, b) => b.priorityScore - a.priorityScore)
 
-    console.log(`   Adjacent chest targets: ${adjacentTargetsWithScore.length}`)
+    // console.log(`   Adjacent chest targets: ${adjacentTargetsWithScore.length}`)
     if (adjacentTargetsWithScore.length > 0) {
-      console.log(
-        `   Best position would destroy ${adjacentTargetsWithScore[0].chestCount} chest(s)`,
-      )
+      // console.log(
+      //   `   Best position would destroy ${adjacentTargetsWithScore[0].chestCount} chest(s)`,
+      // )
     }
 
     if (adjacentTargetsWithScore.length) {
@@ -1104,30 +1104,30 @@ export function decideNextAction(state, myUid) {
         (t) => t.chestCount === adjacentTargetsWithScore[0].chestCount,
       )
 
-      console.log(`   🎯 Attempting to path to ${bestTargets.length} best bombing position(s)...`)
-      console.log(
-        `      Targets: ${bestTargets
-          .slice(0, 5)
-          .map((t) => `[${t.x},${t.y}](${t.chestCount})`)
-          .join(", ")}`,
-      )
+      // console.log(`   🎯 Attempting to path to ${bestTargets.length} best bombing position(s)...`)
+      // console.log(
+      //   `      Targets: ${bestTargets
+      //     .slice(0, 5)
+      //     .map((t) => `[${t.x},${t.y}](${t.chestCount})`)
+      //     .join(", ")}`,
+      // )
 
       chestResult = findSafePath(map, player, bestTargets, bombs, bombers, myUid)
 
       // FALLBACK: If no safe path found, try findBestPath (relaxed timing)
       if (!chestResult && bestTargets.length > 0) {
-        console.log(`   ⚠️ No safe path found, trying relaxed path search...`)
+        // console.log(`   ⚠️ No safe path found, trying relaxed path search...`)
         chestResult = findBestPath(map, player, bestTargets, bombs, bombers, myUid, false)
         if (chestResult && chestResult.path.length > 0) {
-          console.log(
-            `   ✅ Found relaxed path to chest position (${chestResult.path.length} steps)`,
-          )
+          // console.log(
+          //   `   ✅ Found relaxed path to chest position (${chestResult.path.length} steps)`,
+          // )
         }
       }
 
       // FALLBACK 2: If still no path, try ANY chest position (even with fewer chests)
       if (!chestResult && adjacentTargetsWithScore.length > bestTargets.length) {
-        console.log(`   ⚠️ No path to best positions, trying ANY reachable chest position...`)
+        // console.log(`   ⚠️ No path to best positions, trying ANY reachable chest position...`)
         // Try all positions sorted by chest count (best first)
         const allSorted = [...adjacentTargetsWithScore].sort((a, b) => b.chestCount - a.chestCount)
 
@@ -1136,9 +1136,9 @@ export function decideNextAction(state, myUid) {
           const singlePath = findBestPath(map, player, [target], bombs, bombers, myUid, false)
 
           if (singlePath && singlePath.path.length > 0) {
-            console.log(
-              `   ✅ Found path to position [${target.x},${target.y}] with ${target.chestCount} chest(s) (${singlePath.path.length} steps)`,
-            )
+            // console.log(
+            //   `   ✅ Found path to position [${target.x},${target.y}] with ${target.chestCount} chest(s) (${singlePath.path.length} steps)`,
+            // )
             chestResult = singlePath
             break
           }
@@ -1146,23 +1146,23 @@ export function decideNextAction(state, myUid) {
       }
 
       if (chestResult) {
-        console.log(
-          `   ✅ Path to chest bombing position: ${chestResult.path.join(" → ")} (${chestResult.path.length} steps)`,
-        )
+        // console.log(
+        //   `   ✅ Path to chest bombing position: ${chestResult.path.join(" → ")} (${chestResult.path.length} steps)`,
+        // )
       } else {
-        console.log(`   ❌ No path found to any chest bombing positions`)
-        console.log(
-          `      This usually means: (1) All positions blocked by bombs/walls, (2) Timing unsafe, or (3) No walkable path`,
-        )
+        // console.log(`   ❌ No path found to any chest bombing positions`)
+        // console.log(
+        //   `      This usually means: (1) All positions blocked by bombs/walls, (2) Timing unsafe, or (3) No walkable path`,
+        // )
 
         // DEBUG: Check if player is already at a good bombing position
         const playerAtGoodPosition = adjacentTargetsWithScore.find(
           (t) => t.x === player.x && t.y === player.y,
         )
         if (playerAtGoodPosition) {
-          console.log(
-            `   💡 Player is ALREADY at bombing position [${player.x},${player.y}] (${playerAtGoodPosition.chestCount} chests)!`,
-          )
+          // console.log(
+          //   `   💡 Player is ALREADY at bombing position [${player.x},${player.y}] (${playerAtGoodPosition.chestCount} chests)!`,
+          // )
           // Create a fake result to trigger bombing
           chestResult = {
             path: [], // Already at position
@@ -1174,38 +1174,38 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 4: Target Prioritization
-  console.log(`\n🔍 PHASE 4: Target Prioritization`)
+  // console.log(`\n🔍 PHASE 4: Target Prioritization`)
   let chosenResult = null
   let targetType = null
 
   if (itemResult && chestResult) {
-    console.log(
-      `   Comparing: Item(${itemResult.path.length}) vs Chest(${chestResult.path.length}) + Bias(${ITEM_PRIORITY_BIAS})`,
-    )
+    // console.log(
+    //   `   Comparing: Item(${itemResult.path.length}) vs Chest(${chestResult.path.length}) + Bias(${ITEM_PRIORITY_BIAS})`,
+    // )
     if (itemResult.path.length <= chestResult.path.length + ITEM_PRIORITY_BIAS) {
-      console.log("   ✅ Prioritizing ITEM over chest")
+      // console.log("   ✅ Prioritizing ITEM over chest")
       chosenResult = itemResult
       targetType = "ITEM"
     } else {
-      console.log("   ✅ Prioritizing CHEST over item")
+      // console.log("   ✅ Prioritizing CHEST over item")
       chosenResult = chestResult
       targetType = "CHEST"
     }
   } else if (itemResult) {
-    console.log("   ✅ Only ITEM found")
+    // console.log("   ✅ Only ITEM found")
     chosenResult = itemResult
     targetType = "ITEM"
   } else if (chestResult) {
-    console.log("   ✅ Only CHEST found")
+    // console.log("   ✅ Only CHEST found")
     chosenResult = chestResult
     targetType = "CHEST"
   } else {
-    console.log("   ❌ No items or chests found")
+    // console.log("   ❌ No items or chests found")
   }
 
   // PHASE 5: Execute chosen target
   if (chosenResult) {
-    console.log(`\n🔍 PHASE 5: Target Execution (${targetType})`)
+    // console.log(`\n🔍 PHASE 5: Target Execution (${targetType})`)
     const targetAction = handleTarget(chosenResult, state, myUid)
 
     // If handleTarget returns null, it means we should skip to exploration
@@ -1217,9 +1217,9 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 5.5: Enemy Pursuit & Defense (REFACTORED)
-  console.log(`\n🔍 PHASE 5.5: Enemy Pursuit & Defense`)
-  console.log(`   Enemies found: ${enemies.length}`)
-  console.log(`   Strategy: ${fightOrFlee.toUpperCase()}`)
+  // console.log(`\n🔍 PHASE 5.5: Enemy Pursuit & Defense`)
+  // console.log(`   Enemies found: ${enemies.length}`)
+  // console.log(`   Strategy: ${fightOrFlee.toUpperCase()}`)
 
   if (enemies.length > 0) {
     // Use unified enemy bombing system for defense mode
@@ -1243,7 +1243,7 @@ export function decideNextAction(state, myUid) {
 
     // PURSUIT MODE: Only chase enemies if strategy is FIGHT
     if (fightOrFlee === "fight") {
-      console.log(`   🎯 FIGHT mode - actively pursuing enemies`)
+      // console.log(`   🎯 FIGHT mode - actively pursuing enemies`)
 
       // Use unified enemy bombing system for pursuit mode
       const pursuitResult = decideEnemyBombing({
@@ -1264,27 +1264,27 @@ export function decideNextAction(state, myUid) {
         return pursuitResult
       }
     } else {
-      console.log(`   🛡️ FLEE/NEUTRAL mode - skipping active pursuit (defense only)`)
+      // console.log(`   🛡️ FLEE/NEUTRAL mode - skipping active pursuit (defense only)`)
     }
   }
 
   // PHASE 6: Explore
-  console.log(`\n🔍 PHASE 6: Exploration`)
-  console.log(`   Safe tiles available: ${safeTiles.length}`)
+  // console.log(`\n🔍 PHASE 6: Exploration`)
+  // console.log(`   Safe tiles available: ${safeTiles.length}`)
 
   // Debug: Check immediate surroundings
-  console.log(`   Immediate surroundings at [${player.x},${player.y}]:`)
+  // console.log(`   Immediate surroundings at [${player.x},${player.y}]:`)
   for (const [dx, dy, dir] of DIRS) {
     const nx = player.x + dx
     const ny = player.y + dy
     if (inBounds(nx, ny)) {
       const cell = map[ny][nx]
       const isWalkable = WALKABLE.includes(cell)
-      console.log(
-        `     ${dir}: [${nx},${ny}] = "${cell}" ${isWalkable ? "✓ walkable" : "✗ blocked"}`,
-      )
+      // console.log(
+      //   `     ${dir}: [${nx},${ny}] = "${cell}" ${isWalkable ? "✓ walkable" : "✗ blocked"}`,
+      // )
     } else {
-      console.log(`     ${dir}: OUT OF BOUNDS`)
+      // console.log(`     ${dir}: OUT OF BOUNDS`)
     }
   }
 
@@ -1292,23 +1292,23 @@ export function decideNextAction(state, myUid) {
     // Filter out current position from safe tiles
     const otherSafeTiles = safeTiles.filter((t) => t.x !== player.x || t.y !== player.y)
 
-    console.log(`   Trying to path to ${otherSafeTiles.length} safe tiles...`)
-    console.log(
-      `   Sample safe tiles:`,
-      safeTiles
-        .slice(0, 5)
-        .map((t) => `[${t.x},${t.y}]`)
-        .join(", "),
-    )
+    // console.log(`   Trying to path to ${otherSafeTiles.length} safe tiles...`)
+    // console.log(
+    //   `   Sample safe tiles:`,
+    //   safeTiles
+    //     .slice(0, 5)
+    //     .map((t) => `[${t.x},${t.y}]`)
+    //     .join(", "),
+    // )
 
     if (otherSafeTiles.length > 0) {
-      console.log(`   🛡️  Finding safe path to exploration tiles...`)
+      // console.log(`   🛡️  Finding safe path to exploration tiles...`)
       let explorePath = findSafePath(map, player, otherSafeTiles, bombs, bombers, myUid)
 
       // If the best exploration path is only a single step, try to find a longer path
       // to reduce immediate oscillation between two tiles (ping-pong).
       if (explorePath && explorePath.path.length === 1) {
-        console.log(`   ⚠️ Exploration path is only 1 step, searching for longer alternative...`)
+        // console.log(`   ⚠️ Exploration path is only 1 step, searching for longer alternative...`)
         // Sort otherSafeTiles by distance (farthest first) and try to find an alternative path
         const byDistance = otherSafeTiles
           .slice()
@@ -1322,15 +1322,15 @@ export function decideNextAction(state, myUid) {
         // LIMIT: Only try first 10 farthest tiles to avoid infinite loop
         const MAX_EXPLORATION_ATTEMPTS = 10
         const tilesToTry = byDistance.slice(0, MAX_EXPLORATION_ATTEMPTS)
-        console.log(
-          `   🔍 Trying ${tilesToTry.length} farthest tiles for longer path (max ${MAX_EXPLORATION_ATTEMPTS})...`,
-        )
+        // console.log(
+        //   `   🔍 Trying ${tilesToTry.length} farthest tiles for longer path (max ${MAX_EXPLORATION_ATTEMPTS})...`,
+        // )
 
         for (const t of tilesToTry) {
           if (t.x === player.x && t.y === player.y) continue
           const alt = findSafePath(map, player, [t], bombs, bombers, myUid)
           if (alt && alt.path.length > 1) {
-            console.log(`   ✅ Found longer path: ${alt.path.length} steps`)
+            // console.log(`   ✅ Found longer path: ${alt.path.length} steps`)
             explorePath = alt
             break
           }
@@ -1343,39 +1343,39 @@ export function decideNextAction(state, myUid) {
         const guarded = applyBacktrackGuard(firstAction, player, map, bombs, bombers)
 
         if (guarded === "STAY") {
-          console.log(`   ⚠️ Backtrack guard prevented oscillation — staying this tick`)
-          console.log("=".repeat(90) + "\n")
+          // console.log(`   ⚠️ Backtrack guard prevented oscillation — staying this tick`)
+          // console.log("=".repeat(90) + "\n")
           trackDecision(player, "STAY")
           return { action: "STAY" }
         }
 
-        console.log(`   ✅ Exploration path: ${explorePath.path.join(" → ")}`)
-        console.log("🎯 DECISION: EXPLORE")
-        console.log("   Action:", guarded)
+        // console.log(`   ✅ Exploration path: ${explorePath.path.join(" → ")}`)
+        // console.log("🎯 DECISION: EXPLORE")
+        // console.log("   Action:", guarded)
 
         // If backtrack guard changed the action, invalidate fullPath (can't follow anymore)
         const fullPathToUse = guarded === firstAction ? explorePath.path : null
         if (guarded !== firstAction) {
-          console.log(
-            `   ⚠️ Backtrack guard changed action ${firstAction} → ${guarded}, invalidating fullPath`,
-          )
+          // console.log(
+          //   `   ⚠️ Backtrack guard changed action ${firstAction} → ${guarded}, invalidating fullPath`,
+          // )
           isFollowingPath = false
         } else if (fullPathToUse && fullPathToUse.length > 1) {
           // Mark that we're following a multi-step path
           isFollowingPath = true
-          console.log(`   📍 Following ${fullPathToUse.length}-step exploration path`)
+          // console.log(`   📍 Following ${fullPathToUse.length}-step exploration path`)
         }
 
-        console.log("=".repeat(90) + "\n")
+        // console.log("=".repeat(90) + "\n")
         trackDecision(player, guarded)
         // Return full exploration path only if action wasn't changed by guard
         return fullPathToUse ? { action: guarded, fullPath: fullPathToUse } : { action: guarded }
       } else {
-        console.log(`   ❌ No exploration path found (likely trapped by walls/chests)`)
+        // console.log(`   ❌ No exploration path found (likely trapped by walls/chests)`)
       }
     } else {
       // We're at the only safe tile - just pick any walkable adjacent direction
-      console.log(`   ⚠️ Current position is the only safe tile, moving to adjacent walkable tile`)
+      // console.log(`   ⚠️ Current position is the only safe tile, moving to adjacent walkable tile`)
 
       for (const [dx, dy, dir] of DIRS) {
         const nx = player.x + dx
@@ -1389,9 +1389,9 @@ export function decideNextAction(state, myUid) {
           })
 
           if (!hasBomb) {
-            console.log(`   ✅ Moving ${dir} to [${nx},${ny}]`)
-            console.log("🎯 DECISION: EXPLORE (adjacent move)")
-            console.log("=".repeat(90) + "\n")
+            // console.log(`   ✅ Moving ${dir} to [${nx},${ny}]`)
+            // console.log("🎯 DECISION: EXPLORE (adjacent move)")
+            // console.log("=".repeat(90) + "\n")
             trackDecision(player, dir)
             // Return single-step fullPath for client follow consistency
             return {
@@ -1403,15 +1403,15 @@ export function decideNextAction(state, myUid) {
         }
       }
 
-      console.log(`   ❌ No walkable adjacent tiles without bombs`)
+      // console.log(`   ❌ No walkable adjacent tiles without bombs`)
     }
   } else {
-    console.log(`   ⚠️ No safe tiles available`)
+    // console.log(`   ⚠️ No safe tiles available`)
   }
 
   // PHASE 6.5: Break out of isolation by bombing nearby obstacles
   if (myBomber.bombCount > 0) {
-    console.log(`\n🔍 PHASE 6.5: Obstacle Breaking (Trapped Escape)`)
+    // console.log(`\n🔍 PHASE 6.5: Obstacle Breaking (Trapped Escape)`)
 
     // Check if we can bomb to break walls/chests around us
     const nearbyObstacles = []
@@ -1427,7 +1427,7 @@ export function decideNextAction(state, myUid) {
       }
     }
 
-    console.log(`   Found ${nearbyObstacles.length} adjacent breakable obstacles`)
+    // console.log(`   Found ${nearbyObstacles.length} adjacent breakable obstacles`)
 
     if (nearbyObstacles.length > 0) {
       // Check how many obstacles a bomb would destroy
@@ -1449,8 +1449,8 @@ export function decideNextAction(state, myUid) {
         }
       }
 
-      console.log(`   Bombing here would destroy ${obstaclesInRange.length} obstacles`)
-      console.log(`   Obstacle types:`, obstaclesInRange.map((o) => o.type).join(", "))
+      // console.log(`   Bombing here would destroy ${obstaclesInRange.length} obstacles`)
+      // console.log(`   Obstacle types:`, obstaclesInRange.map((o) => o.type).join(", "))
 
       // Only bomb if we can destroy obstacles and escape safely
       if (obstaclesInRange.length > 0) {
@@ -1458,9 +1458,9 @@ export function decideNextAction(state, myUid) {
         const validation = validateBombSafety(player, map, bombs, bombers, myBomber, myUid)
 
         if (validation.canBomb) {
-          console.log(`   ✅ Can bomb obstacles and escape safely!`)
-          console.log(`🎯 DECISION: BOMB (Break Out) + ESCAPE`)
-          console.log("=".repeat(90) + "\n")
+          // console.log(`   ✅ Can bomb obstacles and escape safely!`)
+          // console.log(`🎯 DECISION: BOMB (Break Out) + ESCAPE`)
+          // console.log("=".repeat(90) + "\n")
           return {
             action: "BOMB",
             isEscape: true,
@@ -1469,21 +1469,21 @@ export function decideNextAction(state, myUid) {
             fullPathCoordinates: validation.escapeCoordinates || [],
           }
         } else {
-          console.log(`   ⚠️ Cannot bomb safely: ${validation.reason}`)
+          // console.log(`   ⚠️ Cannot bomb safely: ${validation.reason}`)
           if (validation.reason === "escape_trapped") {
-            console.log(`      🚫 Bombing would create deadlock - REFUSING TO BOMB`)
+            // console.log(`      🚫 Bombing would create deadlock - REFUSING TO BOMB`)
           }
         }
       }
     } else {
-      console.log(`   ⚠️ No breakable obstacles adjacent to bomb`)
+      // console.log(`   ⚠️ No breakable obstacles adjacent to bomb`)
     }
   } else {
-    console.log(`   ⚠️ No bombs available to break obstacles`)
+    // console.log(`   ⚠️ No bombs available to break obstacles`)
   }
 
-  console.log("🎯 DECISION: STAY (No options)")
-  console.log("=".repeat(90) + "\n")
+  // console.log("🎯 DECISION: STAY (No options)")
+  // console.log("=".repeat(90) + "\n")
   trackDecision(player, "STAY")
   return { action: "STAY" }
 }

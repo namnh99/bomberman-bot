@@ -34,18 +34,26 @@ export function registerSocketHandlers(
     onSetupManualControl()
   })
 
+  // Game start handler - wait for this before making any decisions
+  socket.on("start", (data) => {
+    // Make initial decision when game starts
+    if (gameContext.currentState && !manualControlManager.isManualMode()) {
+      onMakeDecision()
+    }
+  })
+
   // User state update handler
   socket.on("user", (state) => {
     gameContext.currentState = state
     // Only make decision if not in manual mode AND not currently escaping
-    if (
-      !manualControlManager.isManualMode() &&
-      !pathModeManager.isEscaping() &&
-      !gameContext.moveIntervalId &&
-      !gameContext.alignIntervalId
-    ) {
-      onMakeDecision()
-    }
+    // if (
+    //   !manualControlManager.isManualMode() &&
+    //   !pathModeManager.isEscaping() &&
+    //   !gameContext.moveIntervalId &&
+    //   !gameContext.alignIntervalId
+    // ) {
+    //   onMakeDecision()
+    // }
   })
 
   // Player move handler
@@ -155,7 +163,8 @@ export function registerSocketHandlers(
   })
 
   socket.on("user_die_update", (data) => {
-    console.log("💀 User died:", data)
+    if (!gameContext.currentState) return
+    gameContext.currentState.bombers = data.bombers
   })
 }
 

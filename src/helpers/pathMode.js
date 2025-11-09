@@ -17,10 +17,10 @@ export class PathModeManager {
   }
 
   startEscape(path, coordinates = []) {
-    console.log(`🚨 Entering ESCAPE MODE - ${path.length} step sequence`)
+    // console.log(`🚨 Entering ESCAPE MODE - ${path.length} step sequence`)
     if (coordinates.length > 0) {
       const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
-      console.log(`   Waypoints: ${coordStr}`)
+      // console.log(`   Waypoints: ${coordStr}`)
     }
     this.escapeMode = true
     this.escapePath = [...path]
@@ -46,14 +46,14 @@ export class PathModeManager {
   }
 
   abortEscape(reason = "Path blocked") {
-    console.log(`   🚨 ABORTING ESCAPE - ${reason}!`)
+    // console.log(`   🚨 ABORTING ESCAPE - ${reason}!`)
     this.escapeMode = false
     this.escapePath = []
     this.escapeCoordinates = []
   }
 
   completeEscape() {
-    console.log(`✅ Escape sequence completed!`)
+    // console.log(`✅ Escape sequence completed!`)
     this.escapeMode = false
     this.escapePath = []
     this.escapeCoordinates = []
@@ -65,10 +65,10 @@ export class PathModeManager {
   }
 
   startFollow(path, coordinates = []) {
-    console.log(`🚶 Entering FOLLOW MODE - ${path.length} step sequence`)
+    // console.log(`🚶 Entering FOLLOW MODE - ${path.length} step sequence`)
     if (coordinates.length > 0) {
       const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
-      console.log(`   Waypoints: ${coordStr}`)
+      // console.log(`   Waypoints: ${coordStr}`)
     }
     this.followMode = true
     this.followPath = [...path]
@@ -89,14 +89,14 @@ export class PathModeManager {
   }
 
   abortFollow(reason = "Path blocked") {
-    console.log(`   🚨 ABORTING FOLLOW PATH - ${reason}!`)
+    // console.log(`   🚨 ABORTING FOLLOW PATH - ${reason}!`)
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
   }
 
   completeFollow() {
-    console.log(`✅ Follow path completed!`)
+    // console.log(`✅ Follow path completed!`)
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
