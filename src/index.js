@@ -19,9 +19,8 @@ import { registerSocketHandlers } from "./handlers/socketHandlers.js"
 import { checkNextPositionTimingSafe } from "./helpers/safetyCheck.js"
 
 // ==================== INITIALIZATION ====================
-
+export const offset = (GRID_SIZE - 35) / 2
 const socket = socketManager.getSocket()
-const offset = (GRID_SIZE - 35) / 2
 
 // Game context - shared state across all modules
 const gameContext = {
@@ -108,8 +107,6 @@ async function smoothMove(direction) {
   }
   const movementStartGrid = { x: myBomber?.x, y: myBomber?.y }
 
-  await alignToGrid(direction, myBomber, socket, gameContext)
-
   const { x: currentX, y: currentY } = toGridCoords(myBomber.x, myBomber.y)
   let nextGridX = currentX
   let nextGridY = currentY
@@ -124,6 +121,31 @@ async function smoothMove(direction) {
 
   const targetPixelX = nextGridX * GRID_SIZE + offset
   const targetPixelY = nextGridY * GRID_SIZE + offset
+
+  console.log(
+    `🔄 Starting smooth move ${direction} from grid [${currentX}, ${currentY}] to grid [${nextGridX}, ${nextGridY}]`,
+  )
+
+  await alignToGrid(
+    direction,
+    { targetX: targetPixelX, targetY: targetPixelY },
+    myBomber,
+    socket,
+    gameContext,
+  )
+
+  // CRITICAL: Get fresh bomber data after alignment!
+  const myBomberAfterAlign = getBomber(gameContext.currentState, gameContext.myUid)
+  if (!myBomberAfterAlign) {
+    console.log("⚠️  Bomber not found after alignment")
+    return
+  }
+
+  console.log(
+    "   🎯 Aligned to grid, proceeding with move..., bot pixel position:",
+    myBomberAfterAlign.x,
+    myBomberAfterAlign.y,
+  )
 
   const isTargetWalkable = isWalkable(
     gameContext.currentState.map,

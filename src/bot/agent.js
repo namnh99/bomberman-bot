@@ -46,7 +46,7 @@ const MAX_POSITION_MEMORY = 5 // Remember last 5 positions
 // Anti-spam bombing: Track last bomb placement to avoid spamming same position
 let lastBombPosition = null
 let lastBombTime = 0
-const BOMB_PLACEMENT_COOLDOWN_MS = 3000 // 3 seconds cooldown between bombing same spot
+const BOMB_PLACEMENT_COOLDOWN_MS = 3000 // 3.0 seconds cooldown between bombing same spot
 
 function trackDecision(player, action) {
   const key = posKey(player.x, player.y)

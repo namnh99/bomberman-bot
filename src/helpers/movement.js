@@ -1,3 +1,4 @@
+import { offset } from "../index.js"
 import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "../utils/constants.js"
 import { manhattanDistance } from "../utils/gridUtils.js"
 
@@ -11,73 +12,45 @@ export function sendMoveCommand(socket, direction) {
 
 /**
  * Align bot to grid before moving in perpendicular direction
- * @param {string} direction - The direction to move (UP/DOWN/LEFT/RIGHT)
- * @param {Object} myBomber - The bomber object
- * @param {Object} socket - Socket connection
- * @param {Object} gameContext - Game context with alignIntervalId
- * @returns {Promise} - Resolves when alignment is complete
+ * Only align if offset is greater than tolerance (5px)
  */
-export function alignToGrid(direction, myBomber, socket, gameContext) {
+export function alignToGrid(direction, target, myBomber, socket, gameContext) {
+  const { targetX, targetY } = target
+  console.log("bot position:", myBomber.x, myBomber.y, "target:", targetX, targetY)
+
   return new Promise((resolve) => {
-    // CRITICAL: Check BOTH axes for comprehensive alignment
-    const xOffset = myBomber.x % GRID_SIZE
-    const yOffset = myBomber.y % GRID_SIZE
-    const xAligned = xOffset <= GRID_SIZE - BOT_SIZE
-    const yAligned = yOffset <= GRID_SIZE - BOT_SIZE
+    // Calculate actual distance from target position
+    const xDiff = Math.abs(myBomber.x - (targetX - offset)) % 40
+    const yDiff = Math.abs(myBomber.y - (targetY - offset)) % 40
 
+    const ALIGNMENT_TOLERANCE = 5
     console.log(
-      `   🔧 Checking alignment: X-offset=${xOffset} (${xAligned ? "✓" : "✗"}), Y-offset=${yOffset} (${yAligned ? "✓" : "✗"})`,
+      `   🔧 Checking alignment: X-diff=${xDiff.toFixed(1)}px, Y-diff=${yDiff.toFixed(1)}px (tolerance: ${ALIGNMENT_TOLERANCE}px)`,
     )
-
-    // If BOTH axes are aligned, no alignment needed
-    if (xAligned && yAligned) {
-      console.log(`   ✅ Already aligned on both axes`)
-      return resolve()
-    }
 
     // Determine which axis needs alignment based on direction
     let moveOver = null
     let alignDirection = null
 
     if (direction === "UP" || direction === "DOWN") {
-      // For vertical movement, ensure horizontal alignment (X-axis)
-      if (!xAligned) {
-        console.log(`   🔧 Aligning X-axis for ${direction} movement`)
-        const offset = (GRID_SIZE - BOT_SIZE) / 2 // Target center position = 17.5
-
-        // CRITICAL: Fix alignment direction logic
-        if (xOffset < offset) {
-          // Bot is too far LEFT, need to move RIGHT to center
-          alignDirection = "RIGHT"
-          moveOver = offset - xOffset
-        } else {
-          // Bot is too far RIGHT, need to move LEFT to center
-          alignDirection = "LEFT"
-          moveOver = xOffset - offset
-        }
+      // For vertical movement, check horizontal alignment (X-axis)
+      if (xDiff > ALIGNMENT_TOLERANCE) {
+        alignDirection = targetX > myBomber.x ? "RIGHT" : "LEFT"
+        moveOver = xDiff + offset
+        console.log(`   🔧 Need to align X-axis: ${moveOver.toFixed(1)}px ${alignDirection}`)
       } else {
-        console.log(`   ⚠️ X-axis aligned but bot still stuck - this shouldn't happen`)
-        return resolve() // Continue anyway
+        console.log(`   ✅ X-axis aligned (diff: ${xDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
+        return resolve()
       }
     } else if (direction === "LEFT" || direction === "RIGHT") {
-      // For horizontal movement, ensure vertical alignment (Y-axis)
-      if (!yAligned) {
-        console.log(`   🔧 Aligning Y-axis for ${direction} movement`)
-        const offset = (GRID_SIZE - BOT_SIZE) / 2 // Target center position = 17.5
-
-        // CRITICAL: Fix alignment direction logic
-        if (yOffset < offset) {
-          // Bot is too far UP, need to move DOWN to center
-          alignDirection = "DOWN"
-          moveOver = offset - yOffset
-        } else {
-          // Bot is too far DOWN, need to move UP to center
-          alignDirection = "UP"
-          moveOver = yOffset - offset
-        }
+      // For horizontal movement, check vertical alignment (Y-axis)
+      if (yDiff > ALIGNMENT_TOLERANCE) {
+        alignDirection = targetY > myBomber.y ? "DOWN" : "UP"
+        moveOver = yDiff + offset
+        console.log(`   🔧 Need to align Y-axis: ${moveOver.toFixed(1)}px ${alignDirection}`)
       } else {
-        console.log(`   ⚠️ Y-axis aligned but bot still stuck - this shouldn't happen`)
-        return resolve() // Continue anyway
+        console.log(`   ✅ Y-axis aligned (diff: ${yDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
+        return resolve()
       }
     }
 
