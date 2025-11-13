@@ -5,13 +5,7 @@ import { STEP_DELAY, GRID_SIZE, DIRS } from "./utils/constants.js"
 import { inBounds, toGridCoords } from "./utils/gridUtils.js"
 
 // Import helpers
-import {
-  sendMoveCommand,
-  alignToGrid,
-  calculateStuckTimeout,
-  isStuck,
-  calculateMovementTiming,
-} from "./helpers/movement.js"
+import { sendMoveCommand, alignToGrid, calculateMovementTiming } from "./helpers/movement.js"
 import { BombTracker, isWalkable, getBomber } from "./helpers/gameState.js"
 import { PathModeManager } from "./helpers/pathMode.js"
 import { ManualControlManager, setupManualControl } from "./helpers/manualControl.js"
@@ -133,13 +127,7 @@ async function smoothMove(direction) {
     `🔄 Starting smooth move ${direction} from grid [${currentX}, ${currentY}] to grid [${nextGridX}, ${nextGridY}]`,
   )
 
-  await alignToGrid(
-    direction,
-    { targetX: targetPixelX, targetY: targetPixelY },
-    myBomber,
-    socket,
-    gameContext,
-  )
+  await alignToGrid(direction, { targetX: targetPixelX, targetY: targetPixelY }, gameContext)
 
   // CRITICAL: Get fresh bomber data after alignment!
   const myBomberAfterAlign = getBomber(gameContext.currentState, gameContext.myUid)
@@ -148,11 +136,11 @@ async function smoothMove(direction) {
     return
   }
 
-  console.log(
-    "   🎯 Aligned to grid, proceeding with move..., bot pixel position:",
-    myBomberAfterAlign.x,
-    myBomberAfterAlign.y,
-  )
+  // console.log(
+  //   "   🎯 Aligned to grid, proceeding with move..., bot pixel position:",
+  //   myBomberAfterAlign.x,
+  //   myBomberAfterAlign.y,
+  // )
 
   const isTargetWalkable = isWalkable(
     gameContext.currentState.map,
@@ -194,54 +182,17 @@ async function smoothMove(direction) {
     isFollowing: pathModeManager.isFollowing(),
   }
 
-  // STUCK DETECTION: Track position to detect if bot is stuck
-  let lastPosition = { x: myBomber.x, y: myBomber.y }
-  let stuckCounter = 0
-  const { MAX_STUCK_TIME, MAX_STUCK_CHECKS } = calculateStuckTimeout(myBomber.speed)
-  const MOVEMENT_THRESHOLD = 2 // Must move at least 2px to count as progress
-
   console.log(
-    `🎯 Moving ${direction} to [${nextGridX}, ${nextGridY}] | Speed: ${myBomber.speed} | Timeout: ${MAX_STUCK_TIME}ms`,
+    `🎯 ${direction} move ${direction} to [${nextGridX}, ${nextGridY}] | Speed: ${myBomber.speed}`,
   )
 
-  // CRITICAL: Server requires continuous move commands to animate movement
-  // Queue will handle rate limiting (15ms) and deduplication
+  // Queue will handle rate limiting (17ms) and deduplication
   gameContext.moveIntervalId = setInterval(() => {
     const currentBomber = getBomber(gameContext.currentState, gameContext.myUid)
     if (!currentBomber) return
 
     const currentPixelX = currentBomber.x
     const currentPixelY = currentBomber.y
-
-    // Check if bot is stuck (not moving)
-    if (isStuck({ x: currentPixelX, y: currentPixelY }, lastPosition, MOVEMENT_THRESHOLD)) {
-      stuckCounter++
-      if (stuckCounter >= MAX_STUCK_CHECKS) {
-        console.log(`⚠️  BOT STUCK! No movement detected for ${MAX_STUCK_TIME}ms`)
-        console.log(`   Target: [${nextGridX}, ${nextGridY}] (${targetPixelX}, ${targetPixelY})px`)
-        console.log(
-          `   Current: [${Math.floor(currentPixelX / GRID_SIZE)}, ${Math.floor(currentPixelY / GRID_SIZE)}] (${currentPixelX}, ${currentPixelY})px`,
-        )
-
-        // Abort current path and re-evaluate
-        if (pathModeManager.isEscaping()) {
-          pathModeManager.abortEscape("Path blocked")
-        }
-        if (pathModeManager.isFollowing()) {
-          pathModeManager.abortFollow("Path blocked")
-        }
-
-        gameContext.forceClearIntervals()
-        gameContext.currentMove = null
-        makeDecision()
-        stuckCounter = 0
-        return
-      }
-    } else {
-      // Bot is moving, reset stuck counter
-      stuckCounter = 0
-      lastPosition = { x: currentPixelX, y: currentPixelY }
-    }
 
     // Check if reached target
     const distanceToTarget =
@@ -254,8 +205,7 @@ async function smoothMove(direction) {
       gameContext.moveIntervalId = null
       handleMoveComplete()
     } else {
-      // CRITICAL: Send move command continuously (queue will deduplicate)
-      sendMoveCommand(socket, direction, "normal")
+      sendMoveCommand(direction, "normal")
     }
   }, STEP_DELAY)
 }
@@ -302,10 +252,13 @@ function handleMoveComplete() {
     let nextX = currentPos.x
     let nextY = currentPos.y
 
-    if (nextMove === "UP") nextY--
-    else if (nextMove === "DOWN") nextY++
-    else if (nextMove === "LEFT") nextX--
-    else if (nextMove === "RIGHT") nextX++
+    for (const [dx, dy, dir] of DIRS) {
+      if (dir === direction) {
+        nextX += dx
+        nextY += dy
+        break
+      }
+    }
 
     // CRITICAL TIMING CHECK: Abort if next position timing unsafe
     const { bombs = [], bombers = [] } = gameContext.currentState
@@ -352,10 +305,13 @@ function handleMoveComplete() {
     let nextX = currentPos.x
     let nextY = currentPos.y
 
-    if (nextMove === "UP") nextY--
-    else if (nextMove === "DOWN") nextY++
-    else if (nextMove === "LEFT") nextX--
-    else if (nextMove === "RIGHT") nextX++
+    for (const [dx, dy, dir] of DIRS) {
+      if (dir === direction) {
+        nextY += dy
+        nextX += dx
+        break
+      }
+    }
 
     const { bombs = [], bombers = [] } = gameContext.currentState
     const { isSafe, blockingBomb } = checkNextPositionTimingSafe({
@@ -433,7 +389,7 @@ function makeDecision() {
     } else {
       console.log(
         `🏃 ESCAPE MODE ACTIVE - Skipping decision (${pathModeManager.getRemainingEscapeSteps()} steps remaining)`,
-      )
+      ) 
       return
     }
   }
@@ -483,14 +439,17 @@ function makeDecision() {
             fullPathCoordinates,
           )
         }
-      }, 500) // Max 500ms wait for server confirmation
+      }, 100) // Max 100ms wait for server confirmation
 
       // Set up one-time listener for bomb confirmation
       const bombConfirmHandler = (bomb) => {
         // Only proceed if this is OUR bomb and we haven't escaped yet
         if (bomb.uid === gameContext.myUid && !escapeExecuted) {
           clearTimeout(bombPlacementTimeout)
-          console.log("✅ Bomb confirmed at current position - proceeding with escape")
+          const { x: gridX, y: gridY } = toGridCoords(bomb.x, bomb.y)
+          console.log(
+            `✅ Bomb confirmed at grid [${gridX}, ${gridY}], pixel [${bomb.x}, ${bomb.y}] position - proceeding with escape`,
+          )
           escapeExecuted = true
           gameContext.waitingForBombPlacement = false
           executeEscapeAfterBomb(
@@ -551,7 +510,7 @@ function handleManualMove(direction, useSmoothMove) {
   } else {
     // Send direct single-step move command
     console.log(`   👣 Sending single step: ${direction}`)
-    sendMoveCommand(socket, direction)
+    sendMoveCommand(direction)
   }
 }
 

@@ -1,12 +1,12 @@
 import { offset } from "../index.js"
-import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "../utils/constants.js"
-import { manhattanDistance } from "../utils/gridUtils.js"
+import { STEP_DELAY, GRID_SIZE } from "../utils/constants.js"
 import { moveQueue } from "./moveQueue.js"
+import { getBomber } from "./gameState.js"
 
 /**
  * Send a single move command to the server (via queue)
  */
-export function sendMoveCommand(socket, direction, priority = "normal") {
+export function sendMoveCommand(direction, priority = "normal") {
   moveQueue.enqueue(direction, priority)
 }
 
@@ -14,9 +14,18 @@ export function sendMoveCommand(socket, direction, priority = "normal") {
  * Align bot to grid before moving in perpendicular direction
  * Only align if offset is greater than tolerance (5px)
  */
-export function alignToGrid(direction, target, myBomber, socket, gameContext) {
+export function alignToGrid(direction, target, gameContext) {
   const { targetX, targetY } = target
-  console.log("bot position:", myBomber.x, myBomber.y, "target:", targetX, targetY)
+
+  const getBomberFresh = () => getBomber(gameContext.currentState, gameContext.myUid)
+  const myBomber = getBomberFresh()
+
+  if (!myBomber) {
+    console.log("⚠️  Bomber not found in alignToGrid")
+    return Promise.resolve()
+  }
+
+  console.log("🤖 Bot position:", myBomber.x, myBomber.y, "target:", targetX, targetY)
 
   return new Promise((resolve) => {
     // Calculate actual distance from target position
@@ -25,7 +34,7 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
 
     const ALIGNMENT_TOLERANCE = 5
     console.log(
-      `   🔧 Checking alignment: X-diff=${xDiff.toFixed(1)}px, Y-diff=${yDiff.toFixed(1)}px (tolerance: ${ALIGNMENT_TOLERANCE}px)`,
+      `   🔧 Checking alignment: X-diff = ${xDiff.toFixed(1)}px, Y-diff = ${yDiff.toFixed(1)}px (tolerance: ${ALIGNMENT_TOLERANCE}px)`,
     )
 
     // Determine which axis needs alignment based on direction
@@ -39,7 +48,7 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
         moveOver = xDiff + offset
         console.log(`   🔧 Need to align X-axis: ${moveOver.toFixed(1)}px ${alignDirection}`)
       } else {
-        console.log(`   ✅ X-axis aligned (diff: ${xDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
+        // console.log(`   ✅ X-axis aligned (diff: ${xDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
         return resolve()
       }
     } else if (direction === "LEFT" || direction === "RIGHT") {
@@ -49,7 +58,7 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
         moveOver = yDiff + offset
         console.log(`   🔧 Need to align Y-axis: ${moveOver.toFixed(1)}px ${alignDirection}`)
       } else {
-        console.log(`   ✅ Y-axis aligned (diff: ${yDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
+        // console.log(`   ✅ Y-axis aligned (diff: ${yDiff.toFixed(1)}px ≤ ${ALIGNMENT_TOLERANCE}px)`)
         return resolve()
       }
     }
@@ -70,14 +79,20 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
       gameContext.alignIntervalId = setInterval(() => {
         const elapsed = Date.now() - alignStartTime
         if (elapsed > maxAlignTime) {
-          console.log(`⚠️  Alignment TIMEOUT! Continuing anyway...`)
+          // console.log(`⚠️  Alignment TIMEOUT! Continuing anyway...`)
           clearInterval(gameContext.alignIntervalId)
           gameContext.alignIntervalId = null
           return resolve()
         }
 
-        // Re-check alignment (server updates position via socket)
-        const currentBomber = myBomber // This gets updated by socket handlers
+        // Re-check alignment - CRITICAL: Get fresh bomber data!
+        const currentBomber = getBomberFresh()
+        if (!currentBomber) {
+          clearInterval(gameContext.alignIntervalId)
+          gameContext.alignIntervalId = null
+          return resolve()
+        }
+
         const xDiff = Math.abs(currentBomber.x - (targetX - offset)) % 40
         const yDiff = Math.abs(currentBomber.y - (targetY - offset)) % 40
 
@@ -88,7 +103,7 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
             : yDiff <= ALIGNMENT_TOLERANCE
 
         if (isAligned) {
-          console.log(`   ✅ Alignment complete`)
+          // console.log(`   ✅ Alignment complete`)
           clearInterval(gameContext.alignIntervalId)
           gameContext.alignIntervalId = null
           return resolve()
@@ -102,24 +117,6 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
       return resolve()
     }
   })
-}
-
-/**
- * Calculate stuck detection timeout based on speed
- */
-export function calculateStuckTimeout(speed) {
-  const timeToMoveOneGrid = (GRID_SIZE / speed) * STEP_DELAY
-  const MAX_STUCK_TIME = Math.max(400, timeToMoveOneGrid * 2) // At least 400ms or 2x expected time
-  const MAX_STUCK_CHECKS = Math.ceil(MAX_STUCK_TIME / STEP_DELAY)
-  return { MAX_STUCK_TIME, MAX_STUCK_CHECKS }
-}
-
-/**
- * Check if bot is stuck (not moving)
- */
-export function isStuck(currentPos, lastPos, threshold = 2) {
-  const movedDistance = manhattanDistance(currentPos.x, currentPos.y, lastPos.x, lastPos.y)
-  return movedDistance < threshold
 }
 
 /**

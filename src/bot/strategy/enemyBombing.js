@@ -1,5 +1,6 @@
 import { DIRS, WALKABLE } from "../../utils/constants.js"
 import { createFutureBomb, getBombWithGrid } from "../../utils/bombUtils.js"
+import { canPlaceBomb } from "../../utils/bomberUtils.js"
 import { willBombHitEnemy } from "./targetSelector.js"
 import {
   toBombGridCoords,
@@ -258,8 +259,8 @@ export function decideEnemyBombing({
 
       console.log(`   ⚔️ Enemy adjacent at [${enemy.x},${enemy.y}] - DEFENSE MODE!`)
 
-      if (myBomber.bombCount === 0) {
-        console.log("   ⚠️ No bombs available for defense")
+      if (!canPlaceBomb(myBomber, bombs, myUid)) {
+        console.log("   ⚠️ No bombs available for defense (all bombs already placed)")
         continue
       }
 
@@ -328,8 +329,8 @@ export function decideEnemyBombing({
       const pathToAdj = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
       if (!pathToAdj || pathToAdj.path.length === 0) continue
 
-      if (myBomber.bombCount === 0) {
-        console.log("   ⚠️ No bombs available, chasing enemy")
+      if (!canPlaceBomb(myBomber, bombs, myUid)) {
+        console.log("   ⚠️ No bombs available (all bombs already placed), chasing enemy")
         trackDecision(player, pathToAdj.path[0])
         return createDecision(pathToAdj.path[0], {
           fullPath: pathToAdj.path,

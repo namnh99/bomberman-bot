@@ -8,6 +8,7 @@ import {
 } from "../utils/constants.js"
 import { posKey, isAdjacent, inBounds, toGridCoords, toBombGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
+import { canPlaceBomb, getRemainingBombs } from "../utils/bomberUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
 import { findSafeTiles, findUnsafeTiles } from "./pathfinding/dangerMap.js"
 import { findEscapeAction, checkSafety } from "./strategy/unifiedEscape.js"
@@ -46,7 +47,6 @@ const MAX_POSITION_MEMORY = 5 // Remember last 5 positions
 // Anti-spam bombing: Track last bomb placement to avoid spamming same position
 let lastBombPosition = null
 let lastBombTime = 0
-const BOMB_PLACEMENT_COOLDOWN_MS = 3000 // 3.0 seconds cooldown between bombing same spot
 
 function trackDecision(player, action) {
   const key = posKey(player.x, player.y)
@@ -261,8 +261,7 @@ function handleTarget(result, state, myUid) {
         )
         console.log("   🏃 Escape action:", validation.escapeAction)
         console.log("=".repeat(60) + "\n")
-
-        if (myBomber.bombCount > 0) {
+        if (canPlaceBomb(myBomber, bombs, myUid)) {
           // Record bomb placement to prevent spam (using actual bomb position)
           recordBombPlacement(bombPos.x, bombPos.y)
 
@@ -389,7 +388,7 @@ function handleTarget(result, state, myUid) {
       myBomber.explosionRange,
     )
 
-    if (chestCount.count > 0 && myBomber.bombCount > 0) {
+    if (canPlaceBomb(myBomber, bombs, myUid)) {
       console.log(
         `   💣 Can destroy ${chestCount.count} chest(s):`,
         chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
@@ -429,15 +428,15 @@ function handleTarget(result, state, myUid) {
         const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
 
         if (futureSafeTiles.length > 0) {
-          // CRITICAL: Escape path must start from BOMB position, not player's current grid
-          // Because server places bomb using toBombGridCoords logic, which may differ from player grid
-          const escapeStartPos = { x: bombPos.x, y: bombPos.y }
+          // CRITICAL: Escape path must start from PLAYER's CURRENT position
+          // Bot hasn't moved yet, so escape from where bot is NOW, not where bomb will be
+          const escapeStartPos = { x: player.x, y: player.y }
 
           // CRITICAL: Use findShortestEscapePath instead of findBestPath
           // This ensures the escape destination has valid exits (not deadlocked by walls/chests)
           const escapePath = findShortestEscapePath(
             map,
-            escapeStartPos, // Start from bomb position, not player position!
+            escapeStartPos, // Start from CURRENT player position!
             futureBombs,
             bombers,
             myBomber,
@@ -616,6 +615,13 @@ export function decideNextAction(state, myUid) {
       )
     })
   }
+
+  // Show bomb capacity info
+  const myActiveBombs = bombs.filter((b) => b.uid === myUid).length
+  const remainingBombs = getRemainingBombs(myBomber, bombs, myUid)
+  console.log(
+    `💣 My Bombs: ${myActiveBombs}/${myBomber.bombCount} active | ${remainingBombs} remaining to place`,
+  )
   // console.log("👥 Active Bombers:", bombers.filter((b) => b.isAlive).length)
 
   // PHASE 0: Game Context Analysis
@@ -698,7 +704,7 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 1.5: Enemy Trap Detection (if aggressive) (REFACTORED)
-  if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
+  if (fightOrFlee === "fight" && enemies.length > 0 && canPlaceBomb(myBomber, bombs, myUid)) {
     console.log("\n🔍 PHASE 1.5: Enemy Trap Detection")
 
     // Use unified enemy bombing system for trap detection
@@ -723,7 +729,7 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 1.6: Chain Reaction Detection
-  if (bombs.length > 0 && myBomber.bombCount > 0 && riskTolerance > 0.5) {
+  if (bombs.length > 0 && canPlaceBomb(myBomber, bombs, myUid) && riskTolerance > 0.5) {
     console.log("\n🔍 PHASE 1.6: Chain Reaction Detection")
     const chainOpportunities = findChainReactionOpportunities(
       player,
@@ -762,7 +768,7 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 1.7: Aggressive Enemy Pursuit (HIGH PRIORITY - before items/chests) (REFACTORED)
   // This phase runs BEFORE item/chest collection to prioritize combat
-  if (fightOrFlee === "fight" && enemies.length > 0 && myBomber.bombCount > 0) {
+  if (fightOrFlee === "fight" && enemies.length > 0 && canPlaceBomb(myBomber, bombs, myUid)) {
     console.log("\n🔍 PHASE 1.7: Aggressive Enemy Pursuit (Priority)")
 
     // Use unified enemy bombing system for priority pursuit
@@ -975,7 +981,7 @@ export function decideNextAction(state, myUid) {
           return { action: "STAY" }
         }
 
-        if (myBomber.bombCount > 0) {
+        if (canPlaceBomb(myBomber, bombs, myUid)) {
           const itemCheck = checkBombWouldDestroyItems(
             bombPos.x,
             bombPos.y,
@@ -1072,7 +1078,7 @@ export function decideNextAction(state, myUid) {
               const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
 
               // Calculate priority score: balance between chest count and distance
-              const priorityScore = chestCount.count - distance
+              const priorityScore = chestCount.count * 0.5 - distance * 1.5
 
               positionScores.set(key, chestCount.count)
               adjacentTargetsWithScore.push({
@@ -1410,7 +1416,7 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 6.5: Break out of isolation by bombing nearby obstacles
-  if (myBomber.bombCount > 0) {
+  if (canPlaceBomb(myBomber, bombs, myUid)) {
     console.log(`\n🔍 PHASE 6.5: Obstacle Breaking (Trapped Escape)`)
 
     // Check if we can bomb to break walls/chests around us

@@ -1,4 +1,4 @@
-import { GRID_SIZE, ITEMS } from "../utils/constants.js"
+import { ITEMS } from "../utils/constants.js"
 import { toGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid } from "../utils/bombUtils.js"
 import { findUnsafeTiles } from "../bot/agent.js"
@@ -88,11 +88,11 @@ export function registerSocketHandlers(
 
       // Log queue status periodically
       const status = moveQueue.getStatus()
-      if (status.totalMoves % 10 === 0) {
-        console.log(
-          `   📊 Move Queue Stats: ${status.confirmedMoves}/${status.totalMoves} (${status.successRate}) | Queue: ${status.queueSize}`,
-        )
-      }
+      // if (status.totalMoves % 10 === 0) {
+      //   console.log(
+      //     `   📊 Move Queue Stats: ${status.confirmedMoves}/${status.totalMoves} (${status.successRate}) | Queue: ${status.queueSize}`,
+      //   )
+      // }
     }
   })
 
@@ -100,20 +100,19 @@ export function registerSocketHandlers(
   socket.on("new_bomb", (bomb) => {
     if (!gameContext.currentState) return
 
-    // DEBUG: Log bomb object details to understand server data
-    const now = Date.now()
-    console.log(`\n💣 NEW BOMB DEBUG:`)
-    console.log(`   ID: ${bomb.id}`)
-    console.log(
-      `   Position: [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}]`,
-    )
-    console.log(`   Owner UID: ${bomb.uid}`)
-    console.log(`   Created At (server): ${bomb.createdAt}`)
-    console.log(`   Life Time (server): ${bomb.lifeTime}`)
-    console.log(`   Client Time (now): ${now}`)
-    console.log(`   Time Diff: ${now - bomb.createdAt}ms`)
-    console.log(`   Will explode in: ${bomb.lifeTime - (now - bomb.createdAt)}ms`)
-    console.log(`   Full bomb object:`, JSON.stringify(bomb, null, 2))
+    // const now = Date.now()
+    // console.log(`\n💣 NEW BOMB DEBUG:`)
+    // console.log(`   ID: ${bomb.id}`)
+    // console.log(
+    //   `   Position: [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}]`,
+    // )
+    // console.log(`   Owner UID: ${bomb.uid}`)
+    // console.log(`   Created At (server): ${bomb.createdAt}`)
+    // console.log(`   Life Time (server): ${bomb.lifeTime}`)
+    // console.log(`   Client Time (now): ${now}`)
+    // console.log(`   Time Diff: ${now - bomb.createdAt}ms`)
+    // console.log(`   Will explode in: ${bomb.lifeTime - (now - bomb.createdAt)}ms`)
+    // console.log(`   Full bomb object:`, JSON.stringify(bomb, null, 2))
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     const { gridX, gridY } = getBombWithGrid(bomb)
@@ -185,7 +184,13 @@ export function registerSocketHandlers(
   })
 
   socket.on("user_die_update", (data) => {
-    console.log("💀 User died:", data)
+    if (!gameContext.currentState) return
+    gameContext.currentState.bombers = data.bombers
+  })
+
+  socket.on("new_life", (data) => {
+    if (!gameContext.currentState) return
+    gameContext.currentState.bombers = data.bombers
   })
 }
 
