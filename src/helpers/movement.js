@@ -1,13 +1,13 @@
 import { offset } from "../index.js"
 import { STEP_DELAY, GRID_SIZE, BOT_SIZE } from "../utils/constants.js"
 import { manhattanDistance } from "../utils/gridUtils.js"
+import { moveQueue } from "./moveQueue.js"
 
 /**
- * Send a single move command to the server
+ * Send a single move command to the server (via queue)
  */
-export function sendMoveCommand(socket, direction) {
-  // console.log(`   📤 Sending move command: ${direction}`)
-  socket.emit("move", { orient: direction })
+export function sendMoveCommand(socket, direction, priority = "normal") {
+  moveQueue.enqueue(direction, priority)
 }
 
 /**
@@ -74,7 +74,8 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
 
       gameContext.alignIntervalId = setInterval(() => {
         if (stepsLeft > 0) {
-          socket.emit("move", { orient: alignDirection })
+          // Use move queue instead of direct emit
+          moveQueue.enqueue(alignDirection, "high") // High priority for alignment
           stepsLeft--
         } else {
           clearTimeout(alignTimeout)

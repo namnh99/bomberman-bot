@@ -13,6 +13,7 @@ import {
   getBomber,
   isBomberOnBombTile,
 } from "../helpers/gameState.js"
+import { moveQueue } from "../helpers/moveQueue.js"
 
 /**
  * Register all socket event handlers
@@ -31,7 +32,19 @@ export function registerSocketHandlers(
     console.log("✅ Connected:", socket.id)
     socket.emit("join", {})
     gameContext.myUid = socket.id
+
+    // Initialize move queue with socket
+    moveQueue.init(socket)
+
     onSetupManualControl()
+  })
+
+  // Game start handler - wait for this before making any decisions
+  socket.on("start", (data) => {
+    // Make initial decision when game starts
+    // if (gameContext.currentState && !manualControlManager.isManualMode()) {
+    //   onMakeDecision()
+    // }
   })
 
   // User state update handler
@@ -68,6 +81,19 @@ export function registerSocketHandlers(
 
     // Update bomber's position in state
     updateBomberPosition(gameContext.currentState, data.uid, data.x, data.y)
+
+    // Confirm move if this is our bomber
+    if (data.uid === gameContext.myUid) {
+      moveQueue.confirmMove()
+
+      // Log queue status periodically
+      const status = moveQueue.getStatus()
+      if (status.totalMoves % 10 === 0) {
+        console.log(
+          `   📊 Move Queue Stats: ${status.confirmedMoves}/${status.totalMoves} (${status.successRate}) | Queue: ${status.queueSize}`,
+        )
+      }
+    }
   })
 
   // New bomb handler
@@ -144,6 +170,10 @@ export function registerSocketHandlers(
     const bomber = getBomber(gameContext.currentState, data.bomber?.uid)
     if (bomber && bomber.uid === gameContext.myUid) {
       updateBomberAttributes(gameContext.currentState, bomber.uid, data)
+      pathModeManager.completeEscape()
+      pathModeManager.completeFollow()
+      gameContext.forceClearIntervals()
+      onMakeDecision()
     }
   })
 

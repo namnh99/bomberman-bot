@@ -536,22 +536,22 @@ export function decideNextAction(state, myUid) {
   if (recentPositions.length > 4) recentPositions.shift()
 
   // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
-  // if (
-  //   recentPositions.length === 4 &&
-  //   recentPositions[0] === recentPositions[2] &&
-  //   recentPositions[1] === recentPositions[3] &&
-  //   recentPositions[0] !== recentPositions[1]
-  // ) {
-  //   console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
-  //   recentPositions = [] // reset history so we don't continuously trigger
-  //   if (lastDecision) {
-  //     console.log(`   Returning previous decision to commit: ${lastDecision}`)
-  //     const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
-  //     console.log(`   Guarded decision: ${guarded}`)
-  //     return { action: guarded }
-  //   }
-  //   return { action: "STAY" }
-  // }
+  if (
+    recentPositions.length === 4 &&
+    recentPositions[0] === recentPositions[2] &&
+    recentPositions[1] === recentPositions[3] &&
+    recentPositions[0] !== recentPositions[1]
+  ) {
+    console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
+    recentPositions = [] // reset history so we don't continuously trigger
+    if (lastDecision) {
+      console.log(`   Returning previous decision to commit: ${lastDecision}`)
+      const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
+      console.log(`   Guarded decision: ${guarded}`)
+      return { action: guarded }
+    }
+    return { action: "STAY" }
+  }
 
   // Anti-oscillation check
   const currentPosKey = posKey(player.x, player.y)
