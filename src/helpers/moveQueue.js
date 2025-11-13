@@ -160,6 +160,18 @@ class MoveQueueManager {
   }
 
   /**
+   * Abort current pending move and clear queue
+   * Use this when interrupting movement (e.g., changing direction)
+   */
+  abort(reason = "Movement aborted") {
+    // console.log(`   🚫 ${reason} - clearing queue (${this.queue.length} moves pending)`)
+    this.queue = []
+    // Don't clear pendingMove - let it complete to avoid desync
+    // Just stop processing new moves
+    this.isProcessing = false
+  }
+
+  /**
    * Get queue status
    */
   getStatus() {

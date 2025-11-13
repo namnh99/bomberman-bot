@@ -56,34 +56,48 @@ export function alignToGrid(direction, target, myBomber, socket, gameContext) {
 
     if (moveOver && alignDirection) {
       const alignSteps = Math.ceil(moveOver / myBomber.speed)
-      let stepsLeft = alignSteps
       console.log(
         `🔧 Aligning ${alignDirection} (${moveOver.toFixed(1)}px in ${alignSteps} steps, speed: ${myBomber.speed}) before moving ${direction}`,
       )
 
       // STUCK DETECTION for alignment
       const maxAlignTime = alignSteps * STEP_DELAY * 3 // Allow 3x expected time
-      const alignTimeout = setTimeout(() => {
-        if (gameContext.alignIntervalId) {
-          console.log(`⚠️  Alignment TIMEOUT! Clearing interval and continuing...`)
-          clearInterval(gameContext.alignIntervalId)
-          gameContext.alignIntervalId = null
-          resolve()
-        }
-      }, maxAlignTime)
+      const alignStartTime = Date.now()
+      let lastCheckPos = { x: myBomber.x, y: myBomber.y }
 
+      // CRITICAL: Send alignment commands continuously (server requires this)
+      // Queue will handle rate limiting and deduplication
       gameContext.alignIntervalId = setInterval(() => {
-        if (stepsLeft > 0) {
-          // Use move queue instead of direct emit
-          moveQueue.enqueue(alignDirection, "high") // High priority for alignment
-          stepsLeft--
-        } else {
-          clearTimeout(alignTimeout)
+        const elapsed = Date.now() - alignStartTime
+        if (elapsed > maxAlignTime) {
+          console.log(`⚠️  Alignment TIMEOUT! Continuing anyway...`)
           clearInterval(gameContext.alignIntervalId)
           gameContext.alignIntervalId = null
           return resolve()
         }
-      }, STEP_DELAY - 10)
+
+        // Re-check alignment (server updates position via socket)
+        const currentBomber = myBomber // This gets updated by socket handlers
+        const xDiff = Math.abs(currentBomber.x - (targetX - offset)) % 40
+        const yDiff = Math.abs(currentBomber.y - (targetY - offset)) % 40
+
+        const ALIGNMENT_TOLERANCE = 5
+        const isAligned =
+          direction === "UP" || direction === "DOWN"
+            ? xDiff <= ALIGNMENT_TOLERANCE
+            : yDiff <= ALIGNMENT_TOLERANCE
+
+        if (isAligned) {
+          console.log(`   ✅ Alignment complete`)
+          clearInterval(gameContext.alignIntervalId)
+          gameContext.alignIntervalId = null
+          return resolve()
+        }
+
+        // Send alignment command continuously (queue will deduplicate)
+        moveQueue.enqueue(alignDirection, "high")
+        lastCheckPos = { x: currentBomber.x, y: currentBomber.y }
+      }, STEP_DELAY)
     } else {
       return resolve()
     }
