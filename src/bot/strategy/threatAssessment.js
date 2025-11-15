@@ -129,7 +129,7 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
     console.log(
       `      (Endgame: ${enemies.length} enemies, resources: items=${resources.itemCount}, chests=${resources.chestCount})`,
     )
-    // Don't return "flee" - continue to endgame logic below
+    // Continue to endgame logic below (don't return)
   } else if (mostThreatening.level === "critical") {
     // EARLY/MID GAME: Flee from critical threats
     console.log(`   🚨 Critical threat detected (NOT endgame) → FLEE`)
@@ -137,18 +137,21 @@ export function shouldFightOrFlee(enemies, myBomber, myPos, resources) {
   }
 
   // ENDGAME: Fight if few enemies left (1-3) - VERY aggressive!
-  // Fight if have 70% power or more
+  // MUST FIGHT in final showdown, even if weaker
   if (enemies.length <= 3 && (resources.chestCount < 20 || resources.itemCount < 3)) {
     if (myPower >= avgEnemyPower * 0.5) {
       // Fight if reasonably strong - aggressive endgame!
       console.log(
-        `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (have 70%+ power)`,
+        `   🎯 ENDGAME condition met: ${enemies.length} enemies, low resources → FIGHT! (have 50%+ power)`,
       )
       return "fight"
     } else {
+      // CRITICAL: Even if weak, MUST fight in endgame (no alternative)
       console.log(
-        `   ⚠️ ENDGAME but too weak: need ${(avgEnemyPower * 0.7).toFixed(1)} power, have ${myPower.toFixed(1)}`,
+        `   ⚠️ ENDGAME but weak: need ${(avgEnemyPower * 0.5).toFixed(1)} power, have ${myPower.toFixed(1)}`,
       )
+      console.log(`   💪 But no choice - FIGHT anyway! (survival mode)`)
+      return "fight" // FORCE FIGHT - can't avoid final battle
     }
   }
 

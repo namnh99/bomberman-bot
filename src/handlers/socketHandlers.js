@@ -184,6 +184,7 @@ export function registerSocketHandlers(
   })
 
   socket.on("user_die_update", (data) => {
+    console.log("data user die", data)
     if (!gameContext.currentState) return
     gameContext.currentState.bombers = data.bombers
   })

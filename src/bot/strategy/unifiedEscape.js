@@ -53,15 +53,18 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
     if (surfResult) return surfResult
   }
 
-  // PRIORITY 2: Staged Escape (2-3 bombs with timing opportunities)
+  // PRIORITY 2: Standard Path Escape (ALWAYS TRY TO MOVE FIRST!)
+  // Try to find a path to complete safety before considering STAY
+  const pathResult = tryPathEscape(player, map, bombs, bombers, myUid)
+  if (pathResult) return pathResult
+
+  // PRIORITY 3: Staged Escape (FALLBACK - only if no path found)
+  // Only STAY if we cannot find any escape path
   if (nearbyBombs.length >= 2 && nearbyBombs.length <= 3) {
+    console.log(`   ⚠️ No escape path found, trying staged escape as fallback...`)
     const stagedResult = tryStagedEscape(player, map, bombs, bombers, myUid)
     if (stagedResult) return stagedResult
   }
-
-  // PRIORITY 3: Standard Path Escape
-  const pathResult = tryPathEscape(player, map, bombs, bombers, myUid)
-  if (pathResult) return pathResult
 
   // PRIORITY 4: Emergency Timing Direction (3+ bombs, path failed)
   if (nearbyBombs.length >= 3) {
@@ -150,20 +153,19 @@ function tryStagedEscape(player, map, bombs, bombers, myUid) {
   if (!unsafeFromFastest.has(currentKey)) {
     const unsafeFromAll = findUnsafeTiles(map, bombs, bombers)
 
-    // If completely safe, stay
+    // If completely safe from ALL bombs, don't need staged escape
     if (!unsafeFromAll.has(currentKey)) {
-      console.log(`   ✅ Current position safe - STAYING`)
-      console.log(`🎯 ESCAPE: Staged (stay completely safe)`)
-      return {
-        action: "STAY",
-        strategy: "staged_stay",
-      }
+      console.log(`   ℹ️ Current position completely safe - no need for staged escape`)
+      return null // Let path escape handle movement to better positions
     }
 
-    // If safe from fast bomb but in slow bomb zone, check if can escape later
+    // If safe from fast bomb but in slow bomb zone:
+    // 1. First try to find a path to complete safety (already tried in pathEscape)
+    // 2. Only STAY if we already verified no escape path exists
     const remainingBombs = sortedBombs.slice(1)
     if (canEscapeAfterWaiting(player, remainingBombs, map, bombers, myUid)) {
-      console.log(`   ✅ Safe from fast bomb, can escape later - STAYING`)
+      console.log(`   ⚠️ Safe from fast bomb, can escape later from slow bombs`)
+      console.log(`   💡 STAGED ESCAPE FALLBACK: STAY (no better escape path available)`)
       console.log(`🎯 ESCAPE: Staged (wait for fast bomb)`)
       return {
         action: "STAY",

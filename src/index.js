@@ -182,9 +182,9 @@ async function smoothMove(direction) {
     isFollowing: pathModeManager.isFollowing(),
   }
 
-  console.log(
-    `🎯 ${direction} move ${direction} to [${nextGridX}, ${nextGridY}] | Speed: ${myBomber.speed}`,
-  )
+  // console.log(
+  //   `🎯 Move ${direction} to [${nextGridX}, ${nextGridY}] | Speed: ${myBomber.speed}`,
+  // )
 
   // Queue will handle rate limiting (17ms) and deduplication
   gameContext.moveIntervalId = setInterval(() => {
@@ -220,32 +220,32 @@ function handleMoveComplete() {
   const { direction, startTime, startGrid } = gameContext.currentMove
 
   // Calculate actual movement time
-  const actualMoveTime = Date.now() - startTime
-  const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-  if (myBomber && startGrid) {
-    // Calculate PIXEL distance moved
-    const pixelsMoved = Math.abs(myBomber.x - startGrid.x) + Math.abs(myBomber.y - startGrid.y)
+  // const actualMoveTime = Date.now() - startTime
+  // const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+  // if (myBomber && startGrid) {
+  //   // Calculate PIXEL distance moved
+  //   const pixelsMoved = Math.abs(myBomber.x - startGrid.x) + Math.abs(myBomber.y - startGrid.y)
 
-    // Calculate GRID distance moved (1 grid = 40px)
-    const gridsMoved = Math.round(pixelsMoved / GRID_SIZE)
+  //   // Calculate GRID distance moved (1 grid = 40px)
+  //   const gridsMoved = Math.round(pixelsMoved / GRID_SIZE)
 
-    if (gridsMoved > 0) {
-      const msPerGridActual = actualMoveTime / gridsMoved
-      const msPerGridTheoretical = (GRID_SIZE / myBomber.speed) * STEP_DELAY // (40/speed) * 17ms
-      const difference = msPerGridActual - msPerGridTheoretical
-      const percentDiff = ((difference / msPerGridTheoretical) * 100).toFixed(0)
+  //   if (gridsMoved > 0) {
+  //     const msPerGridActual = actualMoveTime / gridsMoved
+  //     const msPerGridTheoretical = (GRID_SIZE / myBomber.speed) * STEP_DELAY // (40/speed) * 17ms
+  //     const difference = msPerGridActual - msPerGridTheoretical
+  //     const percentDiff = ((difference / msPerGridTheoretical) * 100).toFixed(0)
 
-      console.log(`📊 TIMING: Moved ${pixelsMoved}px (${gridsMoved} grids) in ${actualMoveTime}ms`)
-      console.log(
-        `   Actual: ${msPerGridActual.toFixed(0)}ms/grid | Theory: ${msPerGridTheoretical.toFixed(0)}ms/grid @ speed ${myBomber.speed}`,
-      )
-      console.log(
-        `   Difference: ${difference > 0 ? "+" : ""}${difference.toFixed(0)}ms (${percentDiff > 0 ? "+" : ""}${percentDiff}%)`,
-      )
-    }
-  }
+  //     console.log(`📊 TIMING: Moved ${pixelsMoved}px (${gridsMoved} grids) in ${actualMoveTime}ms`)
+  //     console.log(
+  //       `   Actual: ${msPerGridActual.toFixed(0)}ms/grid | Theory: ${msPerGridTheoretical.toFixed(0)}ms/grid @ speed ${myBomber.speed}`,
+  //     )
+  //     console.log(
+  //       `   Difference: ${difference > 0 ? "+" : ""}${difference.toFixed(0)}ms (${percentDiff > 0 ? "+" : ""}${percentDiff}%)`,
+  //     )
+  //   }
+  // }
 
-  console.log(`✅ Move complete: ${direction}`)
+  // console.log(`✅ Move complete: ${direction}`)
   gameContext.currentMove = null
 
   // Priority 1: Continue escape mode

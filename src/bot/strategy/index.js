@@ -36,3 +36,5 @@ export {
 export { validateBombSafety } from "./bombValidator.js"
 
 export { findMultiTargetPath, compareSingleVsMultiTarget } from "./multiTargetPath.js"
+
+export { decideSpamBombing, shouldContinueSpamming } from "./spamBombing.js"

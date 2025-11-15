@@ -25,7 +25,7 @@ export function alignToGrid(direction, target, gameContext) {
     return Promise.resolve()
   }
 
-  console.log("🤖 Bot position:", myBomber.x, myBomber.y, "target:", targetX, targetY)
+  // console.log("🤖 Bot position:", myBomber.x, myBomber.y, "target:", targetX, targetY)
 
   return new Promise((resolve) => {
     // Calculate actual distance from target position
@@ -33,9 +33,9 @@ export function alignToGrid(direction, target, gameContext) {
     const yDiff = Math.abs(myBomber.y - (targetY - offset)) % 40
 
     const ALIGNMENT_TOLERANCE = 5
-    console.log(
-      `   🔧 Checking alignment: X-diff = ${xDiff.toFixed(1)}px, Y-diff = ${yDiff.toFixed(1)}px (tolerance: ${ALIGNMENT_TOLERANCE}px)`,
-    )
+    // console.log(
+    //   `   🔧 Checking alignment: X-diff = ${xDiff.toFixed(1)}px, Y-diff = ${yDiff.toFixed(1)}px (tolerance: ${ALIGNMENT_TOLERANCE}px)`,
+    // )
 
     // Determine which axis needs alignment based on direction
     let moveOver = null

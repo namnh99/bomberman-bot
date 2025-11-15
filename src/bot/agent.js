@@ -39,6 +39,11 @@ let lastEscapeFromPosition = null // Track position we just escaped from
 let lastEscapeTime = 0
 const ESCAPE_COOLDOWN_MS = 5000 // Don't return to escaped position for 5 seconds
 
+// Spam bombing: Track ongoing spam sequence
+let activeSpamSequence = null // { positions: [], target: {x, y}, strategy: string, currentIndex: 0 }
+let lastSpamBombTime = 0
+const SPAM_BOMB_COOLDOWN_MS = 500 // Minimum 500ms between spam bombs (safety buffer)
+
 // Track recently visited positions to prevent ping-pong between adjacent tiles
 let recentPositions = [] // Array of {x, y, time}
 const POSITION_MEMORY_MS = 3000 // Remember positions for 3 seconds
@@ -608,45 +613,6 @@ export function decideNextAction(state, myUid) {
   console.log("\n🔍 PHASE 1: Safety Check")
   const { isPlayerSafe, safeTiles } = checkSafety(map, player, bombs, bombers, myBomber)
 
-  // CRITICAL: Check staged escape EVEN WHEN SAFE for multi-bomb scenarios
-  // Bot might be safe NOW but moving could put it in danger
-  // Only consider bombs that are actually affecting the bot (nearby or in blast range)
-  const relevantBombs = bombs.filter((bomb) => {
-    const { x: bx, y: by } = bomb
-    const distance = Math.abs(bx - player.x) + Math.abs(by - player.y)
-    // Consider bombs within reasonable distance (e.g., 8 tiles)
-    // This covers bombs that could affect pathfinding or safety
-    return distance <= 8
-  })
-
-  if (relevantBombs.length >= 2) {
-    console.log(
-      `   🕐 Multi-bomb scenario detected (${relevantBombs.length} nearby bombs out of ${bombs.length} total) - checking staged escape`,
-    )
-
-    // Check if staying in place is the best option
-    const waitStrategy = findSafeWaitingPosition(player, map, bombs, bombers, myUid)
-
-    if (waitStrategy && waitStrategy.isStayingInPlace) {
-      // STAY is the best option - current position safe from fastest bomb
-      console.log(`   💡 STAGED ESCAPE: STAY at [${player.x}, ${player.y}]`)
-      console.log(`      ${waitStrategy.reason}`)
-      console.log(`      ⏱️  Wait time: ${(waitStrategy.waitTime / 1000).toFixed(1)}s`)
-      console.log(`      Current safety: ${isPlayerSafe ? "SAFE" : "UNSAFE"}`)
-      console.log(`🎯 DECISION: STAGED WAIT (stay and let bombs explode)`)
-      console.log("=".repeat(90) + "\n")
-      trackDecision(player, "STAY")
-      if (!isPlayerSafe) trackEscape(player.x, player.y)
-      return {
-        action: "STAY",
-        isEscape: !isPlayerSafe,
-        isWaitingStrategy: true,
-        waitPosition: waitStrategy.waitPosition,
-        waitTime: waitStrategy.waitTime,
-      }
-    }
-  }
-
   if (!isPlayerSafe) {
     // Use unified escape system
     const escapeResult = findEscapeAction(map, player, bombs, bombers, myUid)
@@ -724,12 +690,147 @@ export function decideNextAction(state, myUid) {
     }
   }
 
-  // PHASE 1.7: Aggressive Enemy Pursuit (HIGH PRIORITY - before items/chests) (REFACTORED)
-  // This phase runs BEFORE item/chest collection to prioritize combat
-  if (fightOrFlee === "fight" && enemies.length > 0 && canPlaceBomb(myBomber, bombs, myUid)) {
-    console.log("\n🔍 PHASE 1.7: Aggressive Enemy Pursuit (Priority)")
+  // PHASE 1.6.5: Check for active spam sequence continuation
+  // If bot just escaped from spam bombing, try to continue spamming
+  if (activeSpamSequence && canPlaceBomb(myBomber, bombs, myUid)) {
+    const now = Date.now()
+    const timeSinceLastBomb = now - lastSpamBombTime
 
-    // Use unified enemy bombing system for priority pursuit
+    console.log("\n🔍 PHASE 1.6.5: Spam Sequence Continuation Check")
+    console.log(`   Active spam: ${activeSpamSequence.strategy}`)
+    console.log(
+      `   Current index: ${activeSpamSequence.currentIndex}/${activeSpamSequence.positions.length}`,
+    )
+    console.log(`   Time since last bomb: ${timeSinceLastBomb}ms`)
+    console.log(`   Remaining bombs: ${getRemainingBombs(myBomber, bombs, myUid)}`)
+
+    // Check if spam sequence is still valid
+    if (timeSinceLastBomb >= SPAM_BOMB_COOLDOWN_MS) {
+      const nextIndex = activeSpamSequence.currentIndex + 1
+
+      if (nextIndex < activeSpamSequence.positions.length) {
+        const nextPos = activeSpamSequence.positions[nextIndex]
+        console.log(`   📍 Next spam position: [${nextPos.x},${nextPos.y}]`)
+
+        // Move to next spam position
+        const pathToNext = findSafePath(map, player, [nextPos], bombs, bombers, myUid)
+
+        if (pathToNext && pathToNext.path.length > 0) {
+          // If already at position, BOMB immediately
+          if (player.x === nextPos.x && player.y === nextPos.y) {
+            console.log(`   💣 CONTINUE SPAM! Bombing at [${nextPos.x},${nextPos.y}]`)
+
+            // Validate escape path
+            const futureBombs = [
+              ...bombs,
+              createFutureBomb(nextPos.x, nextPos.y, myBomber.explosionRange, myBomber.uid),
+            ]
+            const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
+            const escapePath = findBestPath(
+              map,
+              nextPos,
+              futureSafeTiles,
+              futureBombs,
+              bombers,
+              myUid,
+              true,
+            )
+
+            if (escapePath && escapePath.path.length > 0) {
+              // Update spam state
+              activeSpamSequence.currentIndex = nextIndex
+              lastSpamBombTime = now
+
+              console.log(
+                `🎯 DECISION: BOMB (Spam Continuation ${nextIndex + 1}/${activeSpamSequence.positions.length})`,
+              )
+              console.log("=".repeat(90) + "\n")
+              trackDecision(player, "BOMB")
+
+              return {
+                action: "BOMB",
+                isEscape: true,
+                escapeAction: escapePath.path[0],
+                fullPath: escapePath.path,
+                mode: `spam_${activeSpamSequence.strategy}_continue`,
+              }
+            } else {
+              console.log(`   ❌ No escape path from next spam position - ending spam sequence`)
+              activeSpamSequence = null
+            }
+          } else {
+            // Move toward spam position
+            console.log(`   🚶 Moving to spam position: ${pathToNext.path[0]}`)
+            console.log(`🎯 DECISION: MOVE (Spam Continuation)`)
+            console.log("=".repeat(90) + "\n")
+            trackDecision(player, pathToNext.path[0])
+
+            return {
+              action: pathToNext.path[0],
+              mode: `spam_${activeSpamSequence.strategy}_move`,
+            }
+          }
+        } else {
+          console.log(`   ❌ No path to next spam position - ending spam sequence`)
+          activeSpamSequence = null
+        }
+      } else {
+        console.log(
+          `   ✅ Spam sequence completed! (${activeSpamSequence.positions.length} bombs placed)`,
+        )
+        activeSpamSequence = null
+      }
+    } else {
+      console.log(
+        `   ⏳ Spam cooldown active (${SPAM_BOMB_COOLDOWN_MS - timeSinceLastBomb}ms remaining)`,
+      )
+    }
+  }
+
+  // PHASE 1.7: Advanced Combat (HIGHEST PRIORITY - Smart Predictive Bombing)
+  // NEW: Use advanced combat strategies (predictive, blocking, range bombing)
+  if (fightOrFlee === "fight" && enemies.length > 0 && canPlaceBomb(myBomber, bombs, myUid)) {
+    console.log("\n🔍 PHASE 1.7: Advanced Combat (Smart Strategies)")
+
+    // Try advanced combat first (predictive & blocking)
+    const advancedCombatResult = decideEnemyBombing({
+      mode: "advanced_combat",
+      enemies,
+      player,
+      myBomber,
+      map,
+      bombs,
+      bombers,
+      myUid,
+      trackDecision,
+    })
+
+    if (advancedCombatResult) {
+      // CRITICAL: Initialize spam sequence if this is a spam bombing decision
+      if (
+        advancedCombatResult.mode &&
+        advancedCombatResult.mode.startsWith("spam_") &&
+        advancedCombatResult.spamSequence
+      ) {
+        console.log(`   🎯 INITIALIZING SPAM SEQUENCE!`)
+        console.log(`      Positions: ${advancedCombatResult.spamSequence.length}`)
+        console.log(
+          `      Target: [${advancedCombatResult.spamTarget.x},${advancedCombatResult.spamTarget.y}]`,
+        )
+
+        activeSpamSequence = {
+          positions: advancedCombatResult.spamSequence,
+          target: advancedCombatResult.spamTarget,
+          strategy: advancedCombatResult.mode.replace("spam_", ""),
+          currentIndex: 0, // Start at first position
+        }
+        lastSpamBombTime = Date.now()
+      }
+
+      return advancedCombatResult
+    }
+
+    // Fallback to priority pursuit (adjacent bombing)
     const priorityPursuitResult = decideEnemyBombing({
       mode: "priority_pursuit",
       enemies,
@@ -747,7 +848,7 @@ export function decideNextAction(state, myUid) {
       return priorityPursuitResult
     }
 
-    console.log(`   ℹ️ No priority pursuit opportunities found`)
+    console.log(`   ℹ️ No combat opportunities found`)
   }
 
   // PHASE 2: Dynamic Item Prioritization
