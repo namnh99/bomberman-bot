@@ -137,8 +137,9 @@ export function findWaveEdges(waveData, currentPos, currentSpeed, map) {
   const edges = []
   const now = Date.now()
 
-  // Calculate time per grid movement
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  // Calculate time per grid movement (adjusted for actual measured timing)
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.85 // ADJUSTED: Network/server/alignment delay
 
   // Check all positions around dangerous zones
   for (const [key, wave] of waveData.entries()) {
@@ -333,7 +334,8 @@ export function findWaveSurfingPath(start, bombs, map, bombers, myUid) {
  */
 function findEscapeSurfingPath(start, waveData, currentSpeed, map, bombers, myUid) {
   const now = Date.now()
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.85 // ADJUSTED: Actual measured timing
 
   console.log(`      🚨 In wave zone - finding escape surf path...`)
 

@@ -1,6 +1,6 @@
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
-import { GRID_SIZE } from "../../utils/constants.js"
+import { GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
 import { createFutureBomb, getBombWithGrid } from "../../utils/bombUtils.js"
 import { toGridCoords } from "../../utils/gridUtils.js"
 
@@ -66,13 +66,14 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // Check if escape is fast enough (should reach safety in time)
-  // Use more accurate timing calculation based on GRID_SIZE and STEP_DELAY
-  const STEP_DELAY = 20 // ms per step
+  // Use more accurate timing calculation based on GRID_SIZE and STEP_DELAY (17ms from constants)
   const stepsNeeded = escapePath.path.length
 
   // Calculate time to reach safety with accurate speed formula:
-  // Time per grid cell = (GRID_SIZE / speed) * STEP_DELAY
-  const timePerStep = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  // Time per grid cell = (GRID_SIZE / speed) * STEP_DELAY * 1.85 (network/server/alignment delay)
+  // Theory: (40 / speed) * 17ms | Actual measured: ~1260ms @ speed 1 → multiplier = 1260/680 = 1.85x
+  const timePerStepTheory = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  const timePerStep = timePerStepTheory * 1.85 // ADJUSTED: Actual measured timing ~1.85x slower
 
   // Add alignment overhead: each move may need up to half a grid cell alignment
   // Conservative estimate: add 50% overhead for alignment

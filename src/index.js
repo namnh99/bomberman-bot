@@ -223,11 +223,24 @@ function handleMoveComplete() {
   const actualMoveTime = Date.now() - startTime
   const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
   if (myBomber && startGrid) {
-    const gridMoved = Math.abs(myBomber.x - startGrid.x) + Math.abs(myBomber.y - startGrid.y)
-    const timing = calculateMovementTiming(actualMoveTime, gridMoved, myBomber.speed)
-    if (timing) {
+    // Calculate PIXEL distance moved
+    const pixelsMoved = Math.abs(myBomber.x - startGrid.x) + Math.abs(myBomber.y - startGrid.y)
+
+    // Calculate GRID distance moved (1 grid = 40px)
+    const gridsMoved = Math.round(pixelsMoved / GRID_SIZE)
+
+    if (gridsMoved > 0) {
+      const msPerGridActual = actualMoveTime / gridsMoved
+      const msPerGridTheoretical = (GRID_SIZE / myBomber.speed) * STEP_DELAY // (40/speed) * 17ms
+      const difference = msPerGridActual - msPerGridTheoretical
+      const percentDiff = ((difference / msPerGridTheoretical) * 100).toFixed(0)
+
+      console.log(`📊 TIMING: Moved ${pixelsMoved}px (${gridsMoved} grids) in ${actualMoveTime}ms`)
       console.log(
-        `📊 TIMING: Moved ${gridMoved}px in ${actualMoveTime}ms (${timing.timePerGrid.toFixed(1)}ms/grid)`,
+        `   Actual: ${msPerGridActual.toFixed(0)}ms/grid | Theory: ${msPerGridTheoretical.toFixed(0)}ms/grid @ speed ${myBomber.speed}`,
+      )
+      console.log(
+        `   Difference: ${difference > 0 ? "+" : ""}${difference.toFixed(0)}ms (${percentDiff > 0 ? "+" : ""}${percentDiff}%)`,
       )
     }
   }
@@ -389,7 +402,7 @@ function makeDecision() {
     } else {
       console.log(
         `🏃 ESCAPE MODE ACTIVE - Skipping decision (${pathModeManager.getRemainingEscapeSteps()} steps remaining)`,
-      ) 
+      )
       return
     }
   }

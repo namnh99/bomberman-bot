@@ -105,8 +105,6 @@ export function decideEnemyBombing({
   bombs,
   bombers,
   myUid,
-  canBombAtPosition,
-  recordBombPlacement,
   trackDecision,
   riskTolerance = 0.5,
   maxDistance = Infinity,
@@ -130,11 +128,6 @@ export function decideEnemyBombing({
 
       if (bestTrap.willKill || (bestTrap.trapValue > 50 && riskTolerance > 0.6)) {
         const bombPos = bestTrap.bombPosition || player
-
-        if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-          console.log(`   ⏳ Trap position on cooldown, skipping`)
-          return null
-        }
 
         const validation = validateBombAndEscape(
           bombPos,
@@ -162,7 +155,6 @@ export function decideEnemyBombing({
           console.log(`🎯 DECISION: BOMB + ESCAPE (Enemy Trap)`)
           console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
-          recordBombPlacement(bombPos.x, bombPos.y)
 
           return createDecision("BOMB", {
             isEscape: true,
@@ -213,7 +205,40 @@ export function decideEnemyBombing({
         }
       }
 
-      if (adjacentTargets.length > 0) {
+      // CRITICAL: Check if ALREADY at adjacent position (path = 0 steps)
+      const alreadyAdjacent = isAdjacent(enemy.x, enemy.y, player.x, player.y)
+
+      if (alreadyAdjacent) {
+        console.log(`   💣 ALREADY adjacent to enemy! Attempting to bomb...`)
+
+        const validation = validateBombAndEscape(
+          player,
+          enemy,
+          map,
+          bombs,
+          bombers,
+          myBomber,
+          myUid,
+        )
+
+        if (validation.valid) {
+          console.log(`   ✅ PRIORITY PURSUIT: Bombing adjacent enemy NOW!`)
+          console.log(`🎯 DECISION: BOMB ENEMY (Adjacent Attack)`)
+          console.log("=".repeat(90) + "\n")
+          trackDecision(player, "BOMB")
+
+          return createDecision("BOMB", {
+            isEscape: true,
+            escapeAction: validation.escapePath[0],
+            fullPath: validation.escapePath,
+            fullPathCoordinates: validation.escapeCoordinates || [],
+            mode: "priority_pursuit_bomb",
+          })
+        } else {
+          console.log(`   ❌ Cannot bomb: ${validation.reason}`)
+        }
+      } else if (adjacentTargets.length > 0) {
+        // Not adjacent yet - need to move
         const pathToEnemy = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
 
         if (pathToEnemy && pathToEnemy.path.length > 0) {
@@ -269,18 +294,11 @@ export function decideEnemyBombing({
         `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
       )
 
-      if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-        console.log("   ⏳ Bomb cooldown active, skipping enemy bomb")
-        continue
-      }
-
       const validation = validateBombAndEscape(bombPos, enemy, map, bombs, bombers, myBomber, myUid)
 
       if (validation.valid) {
         console.log(`   ✅ DEFENSE BOMB: Can bomb adjacent enemy and escape!`)
         console.log(`      Escape: ${validation.escapePath.path.join(" → ")}`)
-
-        recordBombPlacement(bombPos.x, bombPos.y)
 
         return createDecision("BOMB", {
           isEscape: true,

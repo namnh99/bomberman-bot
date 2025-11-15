@@ -44,10 +44,6 @@ let recentPositions = [] // Array of {x, y, time}
 const POSITION_MEMORY_MS = 3000 // Remember positions for 3 seconds
 const MAX_POSITION_MEMORY = 5 // Remember last 5 positions
 
-// Anti-spam bombing: Track last bomb placement to avoid spamming same position
-let lastBombPosition = null
-let lastBombTime = 0
-
 function trackDecision(player, action) {
   const key = posKey(player.x, player.y)
   lastPosition = key
@@ -93,25 +89,6 @@ function isRecentEscapePosition(x, y) {
   }
   const positionKey = posKey(x, y)
   return positionKey === lastEscapeFromPosition
-}
-
-function canBombAtPosition(x, y) {
-  const now = Date.now()
-  const positionKey = posKey(x, y)
-
-  if (lastBombPosition === positionKey && now - lastBombTime < BOMB_PLACEMENT_COOLDOWN_MS) {
-    const timeLeft = ((BOMB_PLACEMENT_COOLDOWN_MS - (now - lastBombTime)) / 1000).toFixed(1)
-    console.log(`   ⏳ Bomb cooldown at [${x}, ${y}] - ${timeLeft}s remaining`)
-    return false
-  }
-
-  return true
-}
-
-function recordBombPlacement(x, y) {
-  lastBombPosition = posKey(x, y)
-  lastBombTime = Date.now()
-  console.log(`   ✅ Recorded bomb placement at [${x}, ${y}]`)
 }
 
 // Prevent immediate backtracking: if action would move back to lastPosition,
@@ -197,14 +174,6 @@ function handleTarget(result, state, myUid) {
         `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
       )
 
-      // Check bombing cooldown at bomb position
-      if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-        console.log("   ⏳ Skipping - cooldown active at this position")
-        console.log("🎯 DECISION: STAY (Bomb cooldown)")
-        console.log("=".repeat(60) + "\n")
-        return { action: "STAY" }
-      }
-
       // Check if bombing would destroy valuable items (using bomb position)
       const itemCheck = checkBombWouldDestroyItems(
         bombPos.x,
@@ -262,9 +231,6 @@ function handleTarget(result, state, myUid) {
         console.log("   🏃 Escape action:", validation.escapeAction)
         console.log("=".repeat(60) + "\n")
         if (canPlaceBomb(myBomber, bombs, myUid)) {
-          // Record bomb placement to prevent spam (using actual bomb position)
-          recordBombPlacement(bombPos.x, bombPos.y)
-
           return {
             action: "BOMB",
             escapeAction: validation.escapeAction,
@@ -394,14 +360,6 @@ function handleTarget(result, state, myUid) {
         chestCount.chests.map((c) => `[${c.x},${c.y}]`).join(", "),
       )
 
-      // Check bombing cooldown (using bomb position, not player position)
-      if (!canBombAtPosition(bombPos.x, bombPos.y)) {
-        console.log("   ⏳ Bomb cooldown active, waiting...")
-        console.log("🎯 DECISION: STAY (Cooldown)")
-        console.log("=".repeat(60) + "\n")
-        return { action: "STAY" }
-      }
-
       // Check if bombing would destroy items (using bomb position)
       const itemCheck = checkBombWouldDestroyItems(
         bombPos.x,
@@ -483,8 +441,6 @@ function handleTarget(result, state, myUid) {
               console.log("   🏃 Escape action:", escapePath.path[0])
               console.log("=".repeat(60) + "\n")
 
-              recordBombPlacement(bombPos.x, bombPos.y)
-
               return {
                 action: "BOMB",
                 escapeAction: escapePath.path[0],
@@ -525,31 +481,35 @@ export function decideNextAction(state, myUid) {
 
   const player = toGridCoords(myBomber.x, myBomber.y)
 
+  // Track current position in history BEFORE making decision
+  const now = Date.now()
+  recentPositions.push({ x: player.x, y: player.y, time: now })
+  // Keep only recent positions (last 3 seconds) and limit to 5
+  recentPositions = recentPositions.filter((p) => now - p.time < POSITION_MEMORY_MS)
+  if (recentPositions.length > MAX_POSITION_MEMORY) {
+    recentPositions.shift()
+  }
+
   // Reset following path flag when new decision is needed
   // This prevents backtrack guard from blocking valid paths
   isFollowingPath = false
 
-  // --- Push current position into short history (keep last 4) ---
-  const currentPosKeyForHistory = posKey(player.x, player.y)
-  recentPositions.push(currentPosKeyForHistory)
-  if (recentPositions.length > 4) recentPositions.shift()
+  // Detect ping-pong pattern using position history: [A,B,A,B]
+  if (recentPositions.length >= 4) {
+    const recent4 = recentPositions.slice(-4)
+    const pos0 = posKey(recent4[0].x, recent4[0].y)
+    const pos1 = posKey(recent4[1].x, recent4[1].y)
+    const pos2 = posKey(recent4[2].x, recent4[2].y)
+    const pos3 = posKey(recent4[3].x, recent4[3].y)
 
-  // Detect simple ping-pong pattern: [A,B,A,B] -> break oscillation
-  if (
-    recentPositions.length === 4 &&
-    recentPositions[0] === recentPositions[2] &&
-    recentPositions[1] === recentPositions[3] &&
-    recentPositions[0] !== recentPositions[1]
-  ) {
-    console.log("⚠️ Detected ping-pong (A↔B) pattern, breaking oscillation")
-    recentPositions = [] // reset history so we don't continuously trigger
-    if (lastDecision) {
-      console.log(`   Returning previous decision to commit: ${lastDecision}`)
-      const guarded = applyBacktrackGuard(lastDecision, player, map, bombs, bombers)
-      console.log(`   Guarded decision: ${guarded}`)
-      return { action: guarded }
+    // Pattern: A→B→A→B (oscillating between 2 positions)
+    if (pos0 === pos2 && pos1 === pos3 && pos0 !== pos1) {
+      console.log(`⚠️ Detected ping-pong (A↔B) pattern: [${pos0}] ↔ [${pos1}]`)
+      console.log(`   Breaking oscillation - staying put to force re-evaluation`)
+      // Clear history to prevent continuous trigger
+      recentPositions = []
+      return { action: "STAY" }
     }
-    return { action: "STAY" }
   }
 
   // Anti-oscillation check
@@ -717,8 +677,6 @@ export function decideNextAction(state, myUid) {
       bombs,
       bombers,
       myUid,
-      canBombAtPosition,
-      recordBombPlacement,
       trackDecision,
       riskTolerance,
     })
@@ -781,8 +739,6 @@ export function decideNextAction(state, myUid) {
       bombs,
       bombers,
       myUid,
-      canBombAtPosition,
-      recordBombPlacement,
       trackDecision,
       maxDistance: 12, // ULTRA AGGRESSIVE: Pursue enemies within 12 tiles
     })
@@ -796,7 +752,7 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 2: Dynamic Item Prioritization
   console.log(`\n🔍 PHASE 2: Dynamic Item Prioritization`)
-  const items = findAllItems(map, bombs, bombers)
+  const items = findAllItems(map, bombs, bombers, false)
   console.log(`   Items found: ${items.length}`)
 
   // CRITICAL: Classify items by danger level instead of filtering completely
@@ -868,15 +824,41 @@ export function decideNextAction(state, myUid) {
   }
 
   // Apply dynamic prioritization to accessible items
-  // BOOST priority for items in blast zones (risky = valuable if we can grab in time)
+  // SCALE priority for items in blast zones based on available time
   const prioritizedItems = accessibleItems
     .map((item) => {
       const priorityData = dynamicItemPriority(item, myBomber, enemies, player, gamePhase)
 
-      // CRITICAL: If item is in blast zone but has enough time, BOOST priority
-      if (item.isInBlastZone && item.timeUntilDanger > 2000) {
-        priorityData.finalValue *= 1.5 // 50% bonus for risky items
-        priorityData.riskBonus = true
+      // CRITICAL: Scale value based on timing safety margin
+      if (item.isInBlastZone && item.timeUntilDanger < Infinity) {
+        const distance = Math.abs(item.x - player.x) + Math.abs(item.y - player.y)
+        // ADJUSTED: Use actual measured timing (actual ~1.85x slower than theory)
+        // Theory: (40px/speed) * 17ms = 680ms @ speed 1
+        // Measured: Speed 1 = ~1260ms/grid → multiply by 1.85x (1260/680)
+        const msPerGridTheory = (40 / myBomber.speed) * 17 // Using GRID_SIZE=40, STEP_DELAY=17
+        const msPerGridActual = msPerGridTheory * 1.85 // Account for network/server/alignment delay
+        const moveTime = distance * msPerGridActual
+        const safetyBuffer = 400 // ms buffer (reduced since moveTime already adjusted)
+        const requiredTime = moveTime + safetyBuffer
+        const timingRatio = item.timeUntilDanger / requiredTime
+
+        if (timingRatio > 1.5) {
+          // Plenty of time: +50% bonus (high risk, high reward)
+          priorityData.finalValue *= 1.5
+          priorityData.riskBonus = "SAFE"
+        } else if (timingRatio > 1.0) {
+          // Just enough time: +20% bonus (calculated risk)
+          priorityData.finalValue *= 1.2
+          priorityData.riskBonus = "TIGHT"
+        } else if (timingRatio > 0.8) {
+          // Too tight: PENALTY -50% (discourage risky moves)
+          priorityData.finalValue *= 0.5
+          priorityData.riskBonus = "UNSAFE"
+        } else {
+          // Definitely unsafe: PENALTY -80% (strongly discourage)
+          priorityData.finalValue *= 0.2
+          priorityData.riskBonus = "DEADLY"
+        }
       }
 
       return priorityData
@@ -886,7 +868,7 @@ export function decideNextAction(state, myUid) {
   if (prioritizedItems.length > 0) {
     console.log(`   Top 3 prioritized items:`)
     prioritizedItems.slice(0, 3).forEach((pi, idx) => {
-      const riskTag = pi.item.isInBlastZone ? " 🔥 RISKY" : ""
+      const riskTag = pi.item.isInBlastZone ? ` 🔥 ${pi.riskBonus || "RISKY"}` : ""
       console.log(
         `     ${idx + 1}. ${pi.item.type} at [${pi.item.x},${pi.item.y}] - Value: ${pi.finalValue.toFixed(1)}${riskTag}`,
       )
@@ -1078,7 +1060,7 @@ export function decideNextAction(state, myUid) {
               const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
 
               // Calculate priority score: balance between chest count and distance
-              const priorityScore = chestCount.count * 0.5 - distance * 1.5
+              const priorityScore = chestCount.count - distance * 2
 
               positionScores.set(key, chestCount.count)
               adjacentTargetsWithScore.push({
@@ -1238,8 +1220,6 @@ export function decideNextAction(state, myUid) {
       bombs,
       bombers,
       myUid,
-      canBombAtPosition,
-      recordBombPlacement,
       trackDecision,
     })
 
@@ -1261,8 +1241,6 @@ export function decideNextAction(state, myUid) {
         bombs,
         bombers,
         myUid,
-        canBombAtPosition,
-        recordBombPlacement,
         trackDecision,
       })
 

@@ -33,9 +33,10 @@ export function isTileSafeByTime(
   const now = Date.now()
 
   // Calculate time to reach this tile with accurate speed calculation
-  // Formula: timePerGrid = (GRID_SIZE / speed) * STEP_DELAY
-  // Each grid cell takes (40px / speed px/tick) * 20ms/tick
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  // Formula: timePerGrid = (GRID_SIZE / speed) * STEP_DELAY * 1.85 (measured adjustment)
+  // Theory: (40px / speed) * 17ms | Actual: ~1260ms @ speed 1 → 1260/680 = 1.85x
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.85 // ADJUSTED: Actual measured timing
 
   // Add alignment overhead: each move may need up to half a grid cell alignment
   // Conservative estimate: add 50% overhead for alignment
@@ -240,7 +241,8 @@ export function isPathSafeByTime(
  */
 export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, currentSpeed = 1) {
   const now = Date.now()
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.85 // ADJUSTED: Actual measured timing
   const alignmentOverhead = timePerGridCell * 0.5
   const timeToReach = stepsToReach * timePerGridCell + alignmentOverhead
 

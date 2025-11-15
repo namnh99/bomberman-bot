@@ -1,4 +1,4 @@
-import { GRID_SIZE } from "../utils/constants.js"
+import { GRID_SIZE, STEP_DELAY } from "../utils/constants.js"
 import {
   getBombWithGrid,
   getBombRange,
@@ -36,8 +36,10 @@ export function checkNextPositionTimingSafe({
     console.log(`      Active bombs: ${bombs.length}`)
   }
 
-  // Calculate time based on ACTUAL speed
-  const timePerGrid = GRID_SIZE / myBomber.speed
+  // Calculate time based on ACTUAL speed (measured ~1.85x slower than theory)
+  // Theory: (40px / speed) * 17ms | Actual: ~1260ms @ speed 1 → 1260/680 = 1.85x
+  const timePerGridTheory = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  const timePerGrid = timePerGridTheory * 1.85 // ADJUSTED: Network/server/alignment delay
   const alignmentTime = 340 // Alignment overhead
   const timeToWalk = timePerGrid + alignmentTime
   const SAFETY_BUFFER = 1580 // Safety buffer in ms
