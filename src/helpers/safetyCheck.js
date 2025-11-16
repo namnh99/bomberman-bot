@@ -1,4 +1,4 @@
-import { GRID_SIZE } from "../utils/constants.js"
+import { GRID_SIZE, STEP_DELAY } from "../utils/constants.js"
 import {
   getBombWithGrid,
   getBombRange,
@@ -29,15 +29,13 @@ export function checkNextPositionTimingSafe({
     return { isSafe: true, blockingBomb: null }
   }
 
-  // console.log(
-  //   `   🔍 ${mode === "escape" ? "Escape" : "Follow"} safety check: Moving to [${nextX},${nextY}]`,
-  // )
   if (mode === "follow") {
-    // console.log(`      Active bombs: ${bombs.length}`)
   }
 
-  // Calculate time based on ACTUAL speed
-  const timePerGrid = GRID_SIZE / myBomber.speed
+  // Calculate time based on ACTUAL speed (measured ~1.20x slower than theory)
+  // Measured data: Speed 2: 407ms (theory 340ms) → 1.20x | Speed 3: 273ms (227ms) → 1.20x
+  const timePerGridTheory = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  const timePerGrid = timePerGridTheory * 1.2 // ADJUSTED: Network/server/alignment delay (post queue optimization)
   const alignmentTime = 340 // Alignment overhead
   const timeToWalk = timePerGrid + alignmentTime
   const SAFETY_BUFFER = 1580 // Safety buffer in ms
@@ -54,16 +52,10 @@ export function checkNextPositionTimingSafe({
     const inBlastZone = isInBlastZone(nextX, nextY, bomb, range)
 
     if (mode === "follow") {
-      // console.log(
-      //   `      💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms`,
-      // )
     }
 
     if (inBlastZone) {
       const timeNeeded = timeToWalk + SAFETY_BUFFER
-      // console.log(
-      //   `      ${mode === "follow" ? "   " : ""}💣 [${bombWithGrid.gridX},${bombWithGrid.gridY}] range=${range} explodes in ${timeLeft.toFixed(0)}ms (need ${timeNeeded.toFixed(0)}ms @ speed ${myBomber.speed})`,
-      // )
 
       if (timeLeft < timeNeeded) {
         isSafe = false

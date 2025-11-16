@@ -9,6 +9,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null // Track target {x, y, type: 'item'|'chest'|'enemy'}
   }
 
   // Escape Mode Methods
@@ -17,10 +18,8 @@ export class PathModeManager {
   }
 
   startEscape(path, coordinates = []) {
-    // console.log(`🚨 Entering ESCAPE MODE - ${path.length} step sequence`)
     if (coordinates.length > 0) {
       const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
-      // console.log(`   Waypoints: ${coordStr}`)
     }
     this.escapeMode = true
     this.escapePath = [...path]
@@ -46,14 +45,12 @@ export class PathModeManager {
   }
 
   abortEscape(reason = "Path blocked") {
-    // console.log(`   🚨 ABORTING ESCAPE - ${reason}!`)
     this.escapeMode = false
     this.escapePath = []
     this.escapeCoordinates = []
   }
 
   completeEscape() {
-    // console.log(`✅ Escape sequence completed!`)
     this.escapeMode = false
     this.escapePath = []
     this.escapeCoordinates = []
@@ -65,10 +62,13 @@ export class PathModeManager {
   }
 
   startFollow(path, coordinates = []) {
-    // console.log(`🚶 Entering FOLLOW MODE - ${path.length} step sequence`)
     if (coordinates.length > 0) {
       const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
-      // console.log(`   Waypoints: ${coordStr}`)
+      // Path target is the final destination
+      const destination = coordinates[coordinates.length - 1]
+      this.pathTarget = { x: destination.x, y: destination.y }
+    } else {
+      this.pathTarget = null
     }
     this.followMode = true
     this.followPath = [...path]
@@ -89,17 +89,17 @@ export class PathModeManager {
   }
 
   abortFollow(reason = "Path blocked") {
-    // console.log(`   🚨 ABORTING FOLLOW PATH - ${reason}!`)
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   completeFollow() {
-    // console.log(`✅ Follow path completed!`)
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   // General Methods
@@ -114,6 +114,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   getStatus() {

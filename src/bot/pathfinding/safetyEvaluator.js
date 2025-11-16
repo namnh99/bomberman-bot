@@ -33,9 +33,11 @@ export function isTileSafeByTime(
   const now = Date.now()
 
   // Calculate time to reach this tile with accurate speed calculation
-  // Formula: timePerGrid = (GRID_SIZE / speed) * STEP_DELAY
-  // Each grid cell takes (40px / speed px/tick) * 20ms/tick
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  // Formula: timePerGrid = (GRID_SIZE / speed) * STEP_DELAY * 1.20 (measured adjustment)
+  // Measured data: Speed 1: 789ms (theory 680ms) → 1.16x | Speed 2: 407ms (340ms) → 1.20x | Speed 3: 273ms (227ms) → 1.20x
+  // Average multiplier: 1.20x (after queue optimization - async confirm, 1ms throttle)
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.2 // ADJUSTED: Actual measured timing
 
   // Add alignment overhead: each move may need up to half a grid cell alignment
   // Conservative estimate: add 50% overhead for alignment
@@ -54,9 +56,6 @@ export function isTileSafeByTime(
 
   // Debug logging for timing calculations (only log first few checks)
   if (stepsToReach <= 3 && bombs.length > 0) {
-    // console.log(
-    //   `      🕐 Timing check [${x},${y}]: ${stepsToReach} steps @ speed ${currentSpeed} = ${timeToReach.toFixed(0)}ms (${timePerGridCell.toFixed(0)}ms/grid + ${alignmentOverhead.toFixed(0)}ms align)`,
-    // )
   }
 
   // Check each bomb to see if it will explode before we reach this tile
@@ -75,9 +74,6 @@ export function isTileSafeByTime(
     // If elapsed time > lifeTime, bomb should have exploded (skip it)
     if (elapsedTime >= bombLifeTime) {
       if (stepsToReach <= 3) {
-        // console.log(
-        //   `         💣 Bomb [${gridX},${gridY}]: SKIPPED (already exploded: elapsed ${elapsedTime}ms >= life ${bombLifeTime}ms)`,
-        // )
       }
       continue // Skip this bomb - it should be gone
     }
@@ -86,21 +82,9 @@ export function isTileSafeByTime(
 
     // DEBUG: Log timing calculations for first few tiles
     if (stepsToReach <= 3 && bombs.length > 0) {
-      // console.log(
-      //   `         💣 Bomb [${gridX},${gridY}]: created=${bombCreatedAt}, life=${bombLifeTime}ms, now=${now}`,
-      // )
-      // console.log(
-      //   `            Time until explosion: ${bombLifeTime}ms - (${now} - ${bombCreatedAt}) = ${timeUntilExplosion.toFixed(0)}ms`,
-      // )
 
       if (timeUntilExplosion < 0) {
-        // console.log(
-        //   `            ⚠️  BOMB ALREADY EXPLODED! (${timeUntilExplosion.toFixed(0)}ms ago)`,
-        // )
       } else if (timeUntilExplosion > bombLifeTime) {
-        // console.log(
-        //   `            ⚠️  TIME CALCULATION ERROR! Explosion time > lifeTime (${timeUntilExplosion.toFixed(0)}ms > ${bombLifeTime}ms)`,
-        // )
       }
     }
 
@@ -116,9 +100,6 @@ export function isTileSafeByTime(
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - BOMB_TILE_BUFFER
 
       if (stepsToReach <= 3 && bombs.length > 0) {
-        // console.log(
-        //   `         💣 Bomb at [${gridX},${gridY}] explodes in ${timeUntilExplosion.toFixed(0)}ms | Crossing tile needs ${timeToReach.toFixed(0)}ms + ${BOMB_TILE_BUFFER.toFixed(0)}ms buffer → ${canCrossSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
-        // )
       }
 
       if (canCrossSafely) {
@@ -163,9 +144,6 @@ export function isTileSafeByTime(
         timeUntilExplosion > 0 && timeToReach < timeUntilExplosion - SAFETY_BUFFER
 
       if (stepsToReach <= 3 && bombs.length > 0) {
-        // console.log(
-        //   `         💥 Tile in blast zone of [${gridX},${gridY}] | Need ${timeToReach.toFixed(0)}ms + ${SAFETY_BUFFER.toFixed(0)}ms buffer vs ${timeUntilExplosion.toFixed(0)}ms available → ${canPassSafely ? "✅ SAFE" : "❌ UNSAFE"}`,
-        // )
       }
 
       if (!canPassSafely) {
@@ -214,9 +192,6 @@ export function isPathSafeByTime(
     )
 
     if (!isSafeByTiming) {
-      // console.log(
-      //   `   ❌ ${pathType} Step ${stepNumber} at [${coord.x},${coord.y}] crosses bomb zone - TIMING UNSAFE!`,
-      // )
       return false
     }
   }
@@ -240,7 +215,8 @@ export function isPathSafeByTime(
  */
 export function getSafeTimeMargin(x, y, stepsToReach, bombs, allBombers, map, currentSpeed = 1) {
   const now = Date.now()
-  const timePerGridCell = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+  const timePerGridCell = timePerGridTheory * 1.2 // ADJUSTED: Actual measured timing (post queue optimization)
   const alignmentOverhead = timePerGridCell * 0.5
   const timeToReach = stepsToReach * timePerGridCell + alignmentOverhead
 

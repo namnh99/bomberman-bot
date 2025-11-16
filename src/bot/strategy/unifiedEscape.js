@@ -1,6 +1,6 @@
 import { DIRS, GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
 import { posKey, isWalkable, manhattanDistance } from "../../utils/gridUtils.js"
-import { getBombWithGrid } from "../../utils/bombUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
@@ -31,7 +31,6 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
   const myBomber = bombers.find((b) => b.uid === myUid)
   const currentSpeed = myBomber?.speed || 1
 
-  // console.log(`   🚨 Finding escape from [${player.x}, ${player.y}]...`)
 
   // Filter relevant bombs (within 8 tiles)
   const nearbyBombs = bombs.filter((bomb) => {
@@ -41,11 +40,9 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
   })
 
   if (nearbyBombs.length === 0) {
-    // console.log(`   ℹ️ No nearby bombs`)
     return null
   }
 
-  // console.log(`   📊 ${nearbyBombs.length} bomb(s) nearby`)
 
   // PRIORITY 1: Wave Surfing (4+ bombs)
   if (nearbyBombs.length >= 4) {
@@ -53,15 +50,17 @@ export function findEscapeAction(map, player, bombs, bombers, myUid) {
     if (surfResult) return surfResult
   }
 
-  // PRIORITY 2: Staged Escape (2-3 bombs with timing opportunities)
+  // PRIORITY 2: Standard Path Escape (ALWAYS TRY TO MOVE FIRST!)
+  // Try to find a path to complete safety before considering STAY
+  const pathResult = tryPathEscape(player, map, bombs, bombers, myUid)
+  if (pathResult) return pathResult
+
+  // PRIORITY 3: Staged Escape (FALLBACK - only if no path found)
+  // Only STAY if we cannot find any escape path
   if (nearbyBombs.length >= 2 && nearbyBombs.length <= 3) {
     const stagedResult = tryStagedEscape(player, map, bombs, bombers, myUid)
     if (stagedResult) return stagedResult
   }
-
-  // PRIORITY 3: Standard Path Escape
-  const pathResult = tryPathEscape(player, map, bombs, bombers, myUid)
-  if (pathResult) return pathResult
 
   // PRIORITY 4: Emergency Timing Direction (3+ bombs, path failed)
   if (nearbyBombs.length >= 3) {
@@ -84,7 +83,6 @@ function tryWaveSurfing(player, bombs, map, bombers, myUid) {
     return distance <= 8
   }).length
 
-  // console.log(`   🌊 Trying Wave Surfing (${nearbyCount} bombs)...`)
 
   const surfPath = findWaveSurfingPath(player, bombs, map, bombers, myUid)
 
@@ -92,8 +90,6 @@ function tryWaveSurfing(player, bombs, map, bombers, myUid) {
 
   // If wave surfing has direct path, use it
   if (surfPath.path && surfPath.path.length > 0) {
-    // console.log(`   ✅ Wave Surfing path: ${surfPath.path.join(" → ")}`)
-    // console.log(`🎯 ESCAPE: Wave Surfing`)
     return {
       action: surfPath.path[0],
       strategy: "wave_surfing",
@@ -105,8 +101,6 @@ function tryWaveSurfing(player, bombs, map, bombers, myUid) {
   const pathToTarget = findBestPath(map, player, [surfPath.target], bombs, bombers, myUid, true)
 
   if (pathToTarget && pathToTarget.path.length > 0) {
-    // console.log(`   ✅ Path to surfing target: ${pathToTarget.path.join(" → ")}`)
-    // console.log(`🎯 ESCAPE: Wave Surfing (assisted)`)
     return {
       action: pathToTarget.path[0],
       strategy: "wave_surfing_assisted",
@@ -141,7 +135,6 @@ function tryStagedEscape(player, map, bombs, bombers, myUid) {
     return null // Not suitable for staged escape
   }
 
-  // console.log(`   ⏱️ Trying Staged Escape (${(timeDiff / 1000).toFixed(1)}s timing difference)...`)
 
   const unsafeFromFastest = findUnsafeTiles(map, [fastestBomb], bombers)
   const currentKey = posKey(player.x, player.y)
@@ -150,21 +143,16 @@ function tryStagedEscape(player, map, bombs, bombers, myUid) {
   if (!unsafeFromFastest.has(currentKey)) {
     const unsafeFromAll = findUnsafeTiles(map, bombs, bombers)
 
-    // If completely safe, stay
+    // If completely safe from ALL bombs, don't need staged escape
     if (!unsafeFromAll.has(currentKey)) {
-      // console.log(`   ✅ Current position safe - STAYING`)
-      // console.log(`🎯 ESCAPE: Staged (stay completely safe)`)
-      return {
-        action: "STAY",
-        strategy: "staged_stay",
-      }
+      return null // Let path escape handle movement to better positions
     }
 
-    // If safe from fast bomb but in slow bomb zone, check if can escape later
+    // If safe from fast bomb but in slow bomb zone:
+    // 1. First try to find a path to complete safety (already tried in pathEscape)
+    // 2. Only STAY if we already verified no escape path exists
     const remainingBombs = sortedBombs.slice(1)
     if (canEscapeAfterWaiting(player, remainingBombs, map, bombers, myUid)) {
-      // console.log(`   ✅ Safe from fast bomb, can escape later - STAYING`)
-      // console.log(`🎯 ESCAPE: Staged (wait for fast bomb)`)
       return {
         action: "STAY",
         strategy: "staged_wait",
@@ -181,8 +169,6 @@ function tryStagedEscape(player, map, bombs, bombers, myUid) {
   const pathToWait = findBestPath(map, player, [waitPos], bombs, bombers, myUid, false)
 
   if (pathToWait && pathToWait.path.length > 0) {
-    // console.log(`   ✅ Moving to waiting position [${waitPos.x}, ${waitPos.y}]`)
-    // console.log(`🎯 ESCAPE: Staged (move to wait pos)`)
     return {
       action: pathToWait.path[0],
       strategy: "staged_move",
@@ -285,13 +271,11 @@ function canEscapeAfterWaiting(pos, remainingBombs, map, bombers, myUid) {
  * PRIORITY 3: Standard path-based escape
  */
 function tryPathEscape(player, map, bombs, bombers, myUid) {
-  // console.log(`   🛤️ Trying path-based escape...`)
 
   const myBomber = bombers.find((b) => b.uid === myUid)
   const safeTiles = findSafeTiles(map, bombs, bombers, myBomber)
 
   if (safeTiles.length === 0) {
-    // console.log(`   ❌ No safe tiles exist`)
     return null
   }
 
@@ -303,12 +287,9 @@ function tryPathEscape(player, map, bombs, bombers, myUid) {
   const pathResult = findBestPath(map, player, targets, bombs, bombers, myUid, true)
 
   if (!pathResult || !pathResult.path || pathResult.path.length === 0) {
-    // console.log(`   ❌ No path to safe tiles`)
     return null
   }
 
-  // console.log(`   ✅ Path escape: ${pathResult.path.join(" → ")}`)
-  // console.log(`🎯 ESCAPE: Path to safety`)
 
   // Track escape for anti-ping-pong
   trackEscape(player, pathResult.path[0], now)
@@ -324,17 +305,13 @@ function tryPathEscape(player, map, bombs, bombers, myUid) {
  * PRIORITY 4: Timing-based direction (Wave Surfing fallback)
  */
 function tryTimingDirection(player, map, bombs, bombers, myUid) {
-  // console.log(`   ⏱️ Trying timing-based direction...`)
 
   const direction = getWaveSurfingDirection(player, bombs, map, bombers, myUid)
 
   if (!direction) {
-    // console.log(`   ❌ No timing direction available`)
     return null
   }
 
-  // console.log(`   ✅ Timing direction: ${direction}`)
-  // console.log(`🎯 ESCAPE: Timing direction`)
 
   return {
     action: direction,
@@ -347,9 +324,13 @@ function tryTimingDirection(player, map, bombs, bombers, myUid) {
  * PRIORITY 5: Emergency moves (last resort)
  */
 function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
-  // console.log(`   🚨 Trying emergency moves...`)
 
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+
+  // Check if current position is safe
+  const currentKey = posKey(player.x, player.y)
+  const currentPositionSafe = !unsafeTiles.has(currentKey)
+
   const moves = []
 
   // Calculate distance from bombs for each direction
@@ -368,12 +349,20 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
     })
     if (isBombTile) continue
 
-    // Calculate min distance to any bomb
+    // Calculate min distance to any bomb AND check if outside blast range
     let minDist = Infinity
+    let isOutsideAllBlastZones = true
+
     for (const bomb of bombs) {
       const { gridX, gridY } = getBombWithGrid(bomb)
       const distance = manhattanDistance(nx, ny, gridX, gridY)
       minDist = Math.min(minDist, distance)
+
+      // Check if this position is outside this bomb's blast range
+      const bombRange = getBombRange(bomb, bombers)
+      if (distance <= bombRange) {
+        isOutsideAllBlastZones = false
+      }
     }
 
     // Check if safe by timing
@@ -387,9 +376,15 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
       nx,
       ny,
       minDist,
+      isOutsideAllBlastZones,
       isSafeByTime,
       isCurrentlySafe,
-      score: (isSafeByTime ? 10000 : 0) + (isCurrentlySafe ? 5000 : 0) + minDist * 100,
+      // Score: Prioritize outside blast zones > safe by timing > currently safe > distance
+      score:
+        (isOutsideAllBlastZones ? 20000 : 0) +
+        (isSafeByTime ? 10000 : 0) +
+        (isCurrentlySafe ? 5000 : 0) +
+        minDist * 100,
     })
   }
 
@@ -400,19 +395,26 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
   const availableMoves = filteredMoves.length > 0 ? filteredMoves : moves
 
   if (availableMoves.length === 0) {
-    // console.log(`   ❌ No moves available - STAYING`)
-    // console.log(`🎯 ESCAPE: Stay (no options)`)
     return { action: "STAY", strategy: "emergency_stay" }
   }
 
-  // Sort by score
-  availableMoves.sort((a, b) => b.score - a.score)
-  const best = availableMoves[0]
+  // CRITICAL: Filter out moves that are NOT safe by timing
+  // Don't move into blast zones when bombs about to explode!
+  const safeMoves = availableMoves.filter((move) => move.isSafeByTime)
 
-  // console.log(
-  //   `   ${best.isSafeByTime ? "✅" : "⚠️"} Emergency move: ${best.dir} (dist: ${best.minDist})`,
-  // )
-  // console.log(`🎯 ESCAPE: Emergency move`)
+  if (safeMoves.length === 0) {
+    // If current position is safe, STAY is better than moving to unsafe position!
+    if (currentPositionSafe) {
+      return { action: "STAY", strategy: "emergency_stay_safe_position" }
+    }
+
+    return { action: "STAY", strategy: "emergency_stay_trapped" }
+  }
+
+  // Sort by score (prioritize outside blast zones + safe by timing + distance)
+  safeMoves.sort((a, b) => b.score - a.score)
+  const best = safeMoves[0]
+
 
   // Track for anti-ping-pong
   trackEscapeMove(player, best.dir, now)
@@ -518,8 +520,6 @@ export function checkSafety(map, player, bombs, bombers, myBomber) {
 
   const finalStatus = isPlayerSafe && !hasUrgentThreat
 
-  // console.log(`   Safety: ${finalStatus ? "✅ SAFE" : "🚨 DANGER"}`)
-  // console.log(`   Safe tiles: ${safeTiles.length}`)
 
   return { isPlayerSafe: finalStatus, safeTiles }
 }

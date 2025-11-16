@@ -74,6 +74,17 @@ export function isAdjacent(x1, y1, x2, y2) {
 }
 
 /**
+ * Check if enemy is within bomb range (can be hit by explosion)
+ * More flexible than isAdjacent - allows bombing from 1-2 tiles away
+ */
+export function isWithinBombRange(myX, myY, enemyX, enemyY, explosionRange) {
+  const distance = manhattanDistance(myX, myY, enemyX, enemyY)
+  // Allow bombing if enemy within reasonable distance (1-2 tiles for safety)
+  // or within actual explosion range if close enough
+  return distance <= Math.min(explosionRange, 2)
+}
+
+/**
  * Create a position key for Set/Map storage
  */
 export function posKey(x, y) {

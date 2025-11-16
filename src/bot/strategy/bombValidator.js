@@ -1,6 +1,6 @@
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
-import { GRID_SIZE } from "../../utils/constants.js"
+import { GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
 import { createFutureBomb, getBombWithGrid } from "../../utils/bombUtils.js"
 import { toGridCoords } from "../../utils/gridUtils.js"
 
@@ -66,13 +66,14 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   }
 
   // Check if escape is fast enough (should reach safety in time)
-  // Use more accurate timing calculation based on GRID_SIZE and STEP_DELAY
-  const STEP_DELAY = 20 // ms per step
+  // Use more accurate timing calculation based on GRID_SIZE and STEP_DELAY (17ms from constants)
   const stepsNeeded = escapePath.path.length
 
   // Calculate time to reach safety with accurate speed formula:
-  // Time per grid cell = (GRID_SIZE / speed) * STEP_DELAY
-  const timePerStep = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  // Time per grid cell = (GRID_SIZE / speed) * STEP_DELAY * 1.85 (network/server/alignment delay)
+  // Theory: (40 / speed) * 17ms | Actual measured: ~1260ms @ speed 1 → multiplier = 1260/680 = 1.85x
+  const timePerStepTheory = (GRID_SIZE / myBomber.speed) * STEP_DELAY
+  const timePerStep = timePerStepTheory * 1.85 // ADJUSTED: Actual measured timing ~1.85x slower
 
   // Add alignment overhead: each move may need up to half a grid cell alignment
   // Conservative estimate: add 50% overhead for alignment
@@ -103,17 +104,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   const ESCAPE_SAFETY_BUFFER = BASE_BUFFER * bombCountFactor
   const availableTime = BOMB_EXPLOSION_TIME - ESCAPE_SAFETY_BUFFER
 
-  // console.log(
-  //   `   ⏱️  Escape timing: ${stepsNeeded} steps × ${timePerStep.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalEscapeTime.toFixed(0)}ms`,
-  // )
-  // console.log(
-  //   `   📊 Buffer: ${ESCAPE_SAFETY_BUFFER.toFixed(0)}ms (base ${BASE_BUFFER.toFixed(0)}ms × bombCount ${bombCountFactor.toFixed(2)}x) | Available: ${availableTime.toFixed(0)}ms`,
-  // )
 
   if (totalEscapeTime >= availableTime) {
-    // console.log(
-    //   `   ❌ ESCAPE TOO SLOW: Need ${totalEscapeTime.toFixed(0)}ms but only ${availableTime.toFixed(0)}ms available - REFUSING TO BOMB (suicide prevention)`,
-    // )
     return {
       canBomb: false,
       escapePath: escapePath.path,
@@ -138,9 +130,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   const unsafeTilesAfterBomb = findUnsafeTiles(map, futureBombs, bombers)
   const finalPosKey = `${finalX},${finalY}`
   if (unsafeTilesAfterBomb.has(finalPosKey)) {
-    // console.log(
-    //   `   ❌ ESCAPE DESTINATION UNSAFE: [${finalX}, ${finalY}] is in blast zone - REFUSING TO BOMB (suicide prevention)`,
-    // )
     return {
       canBomb: false,
       escapePath: null,
@@ -163,10 +152,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   )
 
   if (!secondEscapePath || secondEscapePath.path.length === 0) {
-    // console.log(
-    //   `   ❌ ESCAPE DESTINATION TRAPPED: [${finalX}, ${finalY}] has no further escape - REFUSING TO BOMB (deadlock prevention)`,
-    // )
-    // console.log(`      (Can escape immediate bomb, but will be trapped by surrounding bombs/walls)`)
     return {
       canBomb: false,
       escapePath: null,
@@ -174,12 +159,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     }
   }
 
-  // console.log(
-  //   `   ✅ BOMB VALIDATED: Escape to [${finalX}, ${finalY}] is safe with ${(availableTime - totalEscapeTime).toFixed(0)}ms margin`,
-  // )
-  // console.log(
-  //   `      Secondary escape available: ${secondEscapePath.path.length > 0 ? secondEscapePath.path.join(" → ") : "already safe"}`,
-  // )
 
   return {
     canBomb: true,

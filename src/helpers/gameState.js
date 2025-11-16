@@ -83,9 +83,7 @@ export function updateBomberPosition(currentState, uid, x, y) {
 export function updateBomberAttributes(currentState, uid, data) {
   const bomber = currentState.bombers.find((b) => b?.uid === uid)
   if (bomber) {
-    if (data.speed !== undefined) bomber.speed = data.speed
-    if (data.explosionRange !== undefined) bomber.explosionRange = data.explosionRange
-    if (data.bombCount !== undefined) bomber.bombCount = data.bombCount
+    Object.assign(bomber, data.bomber)
   }
 }
 

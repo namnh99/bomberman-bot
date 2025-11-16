@@ -21,7 +21,17 @@ export function findMultiTargetPath(startPos, targets, map, bombs, bombers, myUi
     if (!nearestTarget) break
 
     // Check if path exists to this target
-    const path = findBestPath(map, currentPos, [nearestTarget], bombs, bombers, myUid)
+    // CRITICAL: Allow timing-based crossing for items (they might be in blast zones but reachable)
+    const path = findBestPath(
+      map,
+      currentPos,
+      [nearestTarget],
+      bombs,
+      bombers,
+      myUid,
+      false, // not escaping
+      true, // allowTimingCrossing = TRUE (calculate if we can reach before explosion)
+    )
 
     if (!path || path.path.length === 0) {
       // Can't reach this target, try next
@@ -85,7 +95,17 @@ function findNearestUnvisitedTarget(pos, targets, visited) {
  */
 export function compareSingleVsMultiTarget(startPos, targets, map, bombs, bombers, myUid) {
   // Single target: path to closest
-  const singlePath = findBestPath(map, startPos, targets, bombs, bombers, myUid)
+  // CRITICAL: Allow timing-based crossing for items (calculated risk for high-value items)
+  const singlePath = findBestPath(
+    map,
+    startPos,
+    targets,
+    bombs,
+    bombers,
+    myUid,
+    false, // not escaping
+    true, // allowTimingCrossing = TRUE
+  )
 
   // Multi target: path through multiple
   const multiPath = findMultiTargetPath(startPos, targets, map, bombs, bombers, myUid)

@@ -20,15 +20,12 @@ class SocketManager {
       })
     }
 
-    // console.log("🔌 Connecting to server:", url);
 
     this.socket.on("connect", () => {
-      // console.log("✅ Connected as:", this.socket.id);
-    })
+    });
 
     this.socket.on("disconnect", (reason) => {
-      // console.log("❌ Disconnected:", reason);
-    })
+    });
 
     this.socket.on("connect_error", (err) => {
       // console.error("⚠️ Connection error:", err.message);

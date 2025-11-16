@@ -111,7 +111,8 @@ export function findSafestTimedPath(start, target, map, bombs, allBombers, curre
       const cell = map[ny][nx]
       if (![".", "B", "R", "S"].includes(cell)) continue
 
-      const moveTime = (GRID_SIZE / currentSpeed) * STEP_DELAY
+      const moveTimeTheory = (GRID_SIZE / currentSpeed) * STEP_DELAY
+      const moveTime = moveTimeTheory * 1.85 // ADJUSTED: Actual measured timing
       const newTimeElapsed = current.timeElapsed + moveTime
       const arrivalTime = Date.now() + newTimeElapsed
 
