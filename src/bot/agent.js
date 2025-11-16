@@ -756,7 +756,17 @@ export function decideNextAction(state, myUid) {
         console.log(`   📍 Next spam position: [${nextPos.x},${nextPos.y}]`)
 
         // Move to next spam position
-        const pathToNext = findSafePath(map, player, [nextPos], bombs, bombers, myUid)
+        // SPAM MOVEMENT: Use timing-based crossing for aggressive movement!
+        const pathToNext = findBestPath(
+          map,
+          player,
+          [nextPos],
+          bombs,
+          bombers,
+          myUid,
+          false, // not escaping
+          true, // allowTimingCrossing - AGGRESSIVE for spam!
+        )
 
         if (pathToNext && pathToNext.path.length > 0) {
           // If already at position, BOMB immediately
@@ -1106,19 +1116,43 @@ export function decideNextAction(state, myUid) {
 
   let chestResult = null
   if (chests.length) {
-    // Check if adjacent to a chest
-    const adjacentChest = chests.find((c) => isAdjacent(c.x, c.y, player.x, player.y))
-    if (adjacentChest) {
-      console.log(`\n🔍 PHASE 3: Adjacent Chest Bombing`)
+    // Check if within bomb range of a chest (not just adjacent)
+    const nearbyChest = chests.find((chest) => {
+      const distance = manhattanDistance(chest.x, chest.y, player.x, player.y)
+      if (distance > myBomber.explosionRange) return false
+
+      // Check if there's a clear line in any direction
+      for (const [dx, dy] of DIRS) {
+        let canHit = true
+        for (let d = 1; d <= distance; d++) {
+          const checkX = player.x + dx * d
+          const checkY = player.y + dy * d
+          if (checkX === chest.x && checkY === chest.y) {
+            return true // Found the chest
+          }
+          if (!map[checkY] || !WALKABLE.includes(map[checkY][checkX])) {
+            canHit = false
+            break
+          }
+        }
+      }
+      return false
+    })
+
+    if (nearbyChest) {
+      console.log(`\n🔍 PHASE 3: Within Range Chest Bombing`)
 
       // Verify chest still exists in map (not already destroyed)
-      const chestCell = map[adjacentChest.y] && map[adjacentChest.y][adjacentChest.x]
+      const chestCell = map[nearbyChest.y] && map[nearbyChest.y][nearbyChest.x]
       if (chestCell !== "C") {
         console.log(
-          `   ⚠️ Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}] already destroyed, skipping`,
+          `   ⚠️ Nearby chest at [${nearbyChest.x}, ${nearbyChest.y}] already destroyed, skipping`,
         )
       } else {
-        console.log(`   🧱 Adjacent chest at [${adjacentChest.x}, ${adjacentChest.y}]`)
+        const distance = manhattanDistance(nearbyChest.x, nearbyChest.y, player.x, player.y)
+        console.log(
+          `   🧱 Chest at [${nearbyChest.x}, ${nearbyChest.y}] within range (${distance} tiles)`,
+        )
 
         // CRITICAL: Use server's bomb placement logic
         const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
@@ -1213,61 +1247,79 @@ export function decideNextAction(state, myUid) {
       // Don't return STAY - continue to find other chest positions or collect items
     }
 
-    // Find best bombing positions for chests
-    const adjacentTargetsWithScore = []
+    // Find best bombing positions for chests using bomb range (not just adjacent)
+    const rangeBombingPositions = []
     const positionScores = new Map()
 
+    // For each chest, check positions within bomb range (1 to explosionRange tiles)
     for (const chest of chests) {
+      // Check all 4 directions within range
       for (const [dx, dy] of DIRS) {
-        const adjX = chest.x + dx
-        const adjY = chest.y + dy
-        const key = posKey(adjX, adjY)
+        // Check from 1 to explosionRange tiles away
+        for (let distance = 1; distance <= myBomber.explosionRange; distance++) {
+          const bombX = chest.x + dx * distance
+          const bombY = chest.y + dy * distance
+          const key = posKey(bombX, bombY)
 
-        if (map[adjY] && WALKABLE.includes(map[adjY][adjX])) {
+          // Skip if already checked this position
+          if (positionScores.has(key)) continue
+
+          // Must be walkable
+          if (!map[bombY] || !WALKABLE.includes(map[bombY][bombX])) continue
+
+          // Skip if bomb already there
           const hasBomb = bombs.some((b) => {
             const { gridX, gridY } = getBombWithGrid(b)
-            return gridX === adjX && gridY === adjY
+            return gridX === bombX && gridY === bombY
           })
+          if (hasBomb) continue
 
-          if (hasBomb) {
-            console.log(
-              `   ⛔ Skipping adjacent target [${adjX},${adjY}] because it has an active bomb`,
-            )
-          } else {
-            if (!positionScores.has(key)) {
-              const chestCount = countChestsDestroyedByBomb(
-                adjX,
-                adjY,
-                map,
-                myBomber.explosionRange,
-              )
-              const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
-
-              // EARLY GAME: Prioritize chest count heavily (destroy multiple chests > close distance)
-              // LATER GAME: Balance chest count and distance more evenly
-              const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
-              let priorityScore
-              if (isEarlyWithManyChests) {
-                // Early game: chest count is 10x more important than distance
-                // Example: 3 chests at distance 5 = 30 - 5 = 25
-                // Example: 2 chests at distance 1 = 20 - 1 = 19
-                priorityScore = chestCount.count * 10 - distance
-              } else {
-                // Later game: balance chest count and distance
-                // Example: 3 chests at distance 5 = 3 - 10 = -7
-                // Example: 2 chests at distance 1 = 2 - 2 = 0
-                priorityScore = chestCount.count - distance * 2
-              }
-
-              positionScores.set(key, chestCount.count)
-              adjacentTargetsWithScore.push({
-                x: adjX,
-                y: adjY,
-                chestCount: chestCount.count,
-                distance: distance,
-                priorityScore: priorityScore,
-              })
+          // Check if this position can actually hit the chest
+          // (no walls blocking between bomb position and chest)
+          let canHit = true
+          for (let d = 1; d < distance; d++) {
+            const checkX = chest.x + dx * d
+            const checkY = chest.y + dy * d
+            if (!map[checkY] || !WALKABLE.includes(map[checkY][checkX])) {
+              canHit = false
+              break
             }
+          }
+
+          if (canHit) {
+            // Count how many chests this position can destroy
+            const chestCount = countChestsDestroyedByBomb(
+              bombX,
+              bombY,
+              map,
+              myBomber.explosionRange,
+            )
+            const distanceToPlayer = Math.abs(bombX - player.x) + Math.abs(bombY - player.y)
+
+            // EARLY GAME: Prioritize chest count heavily (destroy multiple chests > close distance)
+            // LATER GAME: Balance chest count and distance more evenly
+            const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
+            let priorityScore
+            if (isEarlyWithManyChests) {
+              // Early game: chest count is 10x more important than distance
+              // Example: 3 chests at distance 5 = 30 - 5 = 25
+              // Example: 2 chests at distance 1 = 20 - 1 = 19
+              priorityScore = chestCount.count * 10 - distanceToPlayer
+            } else {
+              // Later game: balance chest count and distance
+              // Example: 3 chests at distance 5 = 3 - 10 = -7
+              // Example: 2 chests at distance 1 = 2 - 2 = 0
+              priorityScore = chestCount.count - distanceToPlayer * 2
+            }
+
+            positionScores.set(key, chestCount.count)
+            rangeBombingPositions.push({
+              x: bombX,
+              y: bombY,
+              chestCount: chestCount.count,
+              distance: distanceToPlayer,
+              priorityScore: priorityScore,
+            })
           }
         }
       }
@@ -1275,11 +1327,11 @@ export function decideNextAction(state, myUid) {
 
     // Sort by priority score (considers both chest count and distance)
     // Higher score = better target (more chests, closer distance)
-    adjacentTargetsWithScore.sort((a, b) => b.priorityScore - a.priorityScore)
+    rangeBombingPositions.sort((a, b) => b.priorityScore - a.priorityScore)
 
-    console.log(`   Adjacent chest targets: ${adjacentTargetsWithScore.length}`)
-    if (adjacentTargetsWithScore.length > 0) {
-      const best = adjacentTargetsWithScore[0]
+    console.log(`   Range-based chest bombing positions: ${rangeBombingPositions.length}`)
+    if (rangeBombingPositions.length > 0) {
+      const best = rangeBombingPositions[0]
       const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
       console.log(
         `   Best position would destroy ${best.chestCount} chest(s) at distance ${best.distance} (score: ${best.priorityScore.toFixed(1)})`,
@@ -1289,9 +1341,9 @@ export function decideNextAction(state, myUid) {
       }
     }
 
-    if (adjacentTargetsWithScore.length) {
-      const bestTargets = adjacentTargetsWithScore.filter(
-        (t) => t.chestCount === adjacentTargetsWithScore[0].chestCount,
+    if (rangeBombingPositions.length) {
+      const bestTargets = rangeBombingPositions.filter(
+        (t) => t.chestCount === rangeBombingPositions[0].chestCount,
       )
 
       console.log(`   🎯 Attempting to path to ${bestTargets.length} best bombing position(s)...`)
@@ -1316,10 +1368,10 @@ export function decideNextAction(state, myUid) {
       }
 
       // FALLBACK 2: If still no path, try ANY chest position (even with fewer chests)
-      if (!chestResult && adjacentTargetsWithScore.length > bestTargets.length) {
+      if (!chestResult && rangeBombingPositions.length > bestTargets.length) {
         console.log(`   ⚠️ No path to best positions, trying ANY reachable chest position...`)
         // Try all positions sorted by chest count (best first)
-        const allSorted = [...adjacentTargetsWithScore].sort((a, b) => b.chestCount - a.chestCount)
+        const allSorted = [...rangeBombingPositions].sort((a, b) => b.chestCount - a.chestCount)
 
         for (let i = 0; i < Math.min(20, allSorted.length); i++) {
           const target = allSorted[i]
@@ -1346,7 +1398,7 @@ export function decideNextAction(state, myUid) {
         )
 
         // DEBUG: Check if player is already at a good bombing position
-        const playerAtGoodPosition = adjacentTargetsWithScore.find(
+        const playerAtGoodPosition = rangeBombingPositions.find(
           (t) => t.x === player.x && t.y === player.y,
         )
         if (playerAtGoodPosition) {

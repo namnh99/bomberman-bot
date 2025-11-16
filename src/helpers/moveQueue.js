@@ -13,7 +13,7 @@ class MoveQueueManager {
     this.lastMoveTime = 0
     this.moveCount = 0
     this.confirmedMoves = 0
-    this.MIN_MOVE_INTERVAL = 1 // 1ms minimal throttle - effectively no delay, just prevents true burst
+    this.MIN_MOVE_INTERVAL = 5 // 5ms minimal throttle - effectively no delay, just prevents true burst
   }
 
   /**

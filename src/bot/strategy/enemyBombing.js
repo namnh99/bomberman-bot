@@ -15,8 +15,52 @@ import { findTrapOpportunities } from "./trapDetector.js"
 import { decideAdvancedCombat } from "./advancedCombat.js"
 
 /**
+ * Calculate how many enemy escape routes this bomb position would block
+ */
+function calculateTrapScore(bombX, bombY, enemy, map, range) {
+  let blockedRoutes = 0
+
+  // Check all 4 escape directions from enemy
+  for (const [dx, dy] of DIRS) {
+    let routeBlocked = false
+
+    // Check if this escape route is blocked by wall/bomb already
+    const escapeX = enemy.x + dx
+    const escapeY = enemy.y + dy
+    if (!isWalkable(escapeX, escapeY, map)) {
+      blockedRoutes++
+      continue
+    }
+
+    // Check if bomb explosion would cover this escape route
+    // Bomb creates explosion in 4 directions up to range
+    for (const [bdx, bdy] of DIRS) {
+      for (let step = 0; step <= range; step++) {
+        const expX = bombX + bdx * step
+        const expY = bombY + bdy * step
+
+        // Check if explosion hits the escape tile
+        if (expX === escapeX && expY === escapeY) {
+          routeBlocked = true
+          break
+        }
+
+        // Stop if hit wall
+        if (!isWalkable(expX, expY, map) && !(expX === bombX && expY === bombY)) break
+      }
+      if (routeBlocked) break
+    }
+
+    if (routeBlocked) blockedRoutes++
+  }
+
+  return blockedRoutes // 0-4 (how many escape routes blocked)
+}
+
+/**
  * Find bombing positions within explosion range of enemy
  * FLEXIBLE: Can bomb from distance, not just adjacent!
+ * PRIORITIZES: Trap capability (blocking enemy escape routes)
  * @returns {Array} Array of bombing positions sorted by priority
  */
 function findRangeBasedBombingPositions(enemy, player, map, bombs, range) {
@@ -43,14 +87,21 @@ function findRangeBasedBombingPositions(enemy, player, map, bombs, range) {
       const distanceFromPlayer = manhattanDistance(player.x, player.y, bx, by)
       const distanceFromEnemy = step
 
+      // Calculate trap capability (how many escape routes blocked)
+      const trapScore = calculateTrapScore(bx, by, enemy, map, range)
+
       positions.push({
         x: bx,
         y: by,
         direction: dir,
         distanceFromPlayer,
         distanceFromEnemy,
-        // Priority: closer to enemy = better (tighter trap)
-        priority: distanceFromEnemy * 10 + distanceFromPlayer * 0.1,
+        trapScore, // 0-4 blocked routes
+        // Priority: trap capability > close to enemy > close to player
+        // trapScore * 100: prioritize trap (0-400 points)
+        // distanceFromEnemy * 10: closer to enemy better (10-50 points)
+        // distanceFromPlayer * 0.1: closer to player better (0-5 points)
+        priority: -trapScore * 100 + distanceFromEnemy * 10 + distanceFromPlayer * 0.1,
       })
 
       // Take first valid position in this direction
@@ -59,7 +110,7 @@ function findRangeBasedBombingPositions(enemy, player, map, bombs, range) {
     }
   }
 
-  // Sort by priority (closer to enemy first, then closer to player)
+  // Sort by priority (better trap first, then closer to enemy, then closer to player)
   positions.sort((a, b) => a.priority - b.priority)
 
   return positions
@@ -348,11 +399,21 @@ export function decideEnemyBombing({
           }
 
           // Otherwise, move to first bomb position
-          const pathToSpam = findSafePath(map, player, [position], bombs, bombers, myUid)
+          // SPAM SETUP: Use timing-based crossing for aggressive movement!
+          const pathToSpam = findBestPath(
+            map,
+            player,
+            [position],
+            bombs,
+            bombers,
+            myUid,
+            false, // not escaping yet
+            true, // allowTimingCrossing - AGGRESSIVE for spam setup!
+          )
 
           if (pathToSpam && pathToSpam.path.length > 0) {
-            console.log(`   🚶 Moving to spam position...`)
-            console.log(`🎯 DECISION: MOVE (Spam Setup)`)
+            console.log(`   🚶 Moving to spam position (timing-based)...`)
+            console.log(`🎯 DECISION: MOVE (Spam Setup - Aggressive)`)
             console.log("=".repeat(90) + "\n")
             trackDecision(player, pathToSpam.path[0])
 
@@ -471,6 +532,12 @@ export function decideEnemyBombing({
         console.log(
           `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
         )
+        if (rangeBombingPositions.length > 0) {
+          const best = rangeBombingPositions[0]
+          console.log(
+            `   🎯 Best: [${best.x},${best.y}] - Trap score: ${best.trapScore}/4 routes blocked`,
+          )
+        }
         const pathToEnemy = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
 
         if (pathToEnemy && pathToEnemy.path.length > 0) {
@@ -592,6 +659,12 @@ export function decideEnemyBombing({
       console.log(
         `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
       )
+      if (rangeBombingPositions.length > 0) {
+        const best = rangeBombingPositions[0]
+        console.log(
+          `   🎯 Best: [${best.x},${best.y}] - Trap score: ${best.trapScore}/4 routes blocked`,
+        )
+      }
       const pathToPosition = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
       if (!pathToPosition || pathToPosition.path.length === 0) continue
 
