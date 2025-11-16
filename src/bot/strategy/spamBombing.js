@@ -19,10 +19,8 @@ export function findTrailBombingPositions(player, enemy, map, bombs, myBomber) {
   const range = myBomber.explosionRange
   const remainingBombs = getRemainingBombs(myBomber, bombs, myBomber.uid)
 
-  console.log(`   🔥 Trail Bombing Analysis: ${remainingBombs} bombs available`)
 
   if (remainingBombs < 2) {
-    console.log(`      ❌ Need at least 2 bombs for trail bombing`)
     return null
   }
 
@@ -73,12 +71,9 @@ export function findTrailBombingPositions(player, enemy, map, bombs, myBomber) {
   }
 
   if (trailPositions.length < 2) {
-    console.log(`      ❌ Trail too short (${trailPositions.length} positions)`)
     return null
   }
 
-  console.log(`      ✅ Trail bombing viable: ${trailPositions.length} bomb positions`)
-  console.log(`         Positions: ${trailPositions.map((p) => `[${p.x},${p.y}]`).join(" → ")}`)
 
   return {
     positions: trailPositions,
@@ -96,10 +91,8 @@ export function findCrossBombingPositions(player, enemy, map, bombs, myBomber) {
   const range = myBomber.explosionRange
   const remainingBombs = getRemainingBombs(myBomber, bombs, myBomber.uid)
 
-  console.log(`   ➕ Cross Bombing Analysis: ${remainingBombs} bombs available`)
 
   if (remainingBombs < 2) {
-    console.log(`      ❌ Need at least 2 bombs for cross bombing`)
     return null
   }
 
@@ -199,22 +192,14 @@ export function findCrossBombingPositions(player, enemy, map, bombs, myBomber) {
   const openRoutes = crossPositions.length
   const trapCoverage = blockedRoutes + Math.min(remainingBombs, openRoutes)
 
-  console.log(
-    `      Enemy escape analysis: ${openRoutes} open routes, ${blockedRoutes} already blocked`,
-  )
-  console.log(
-    `      Trap coverage: ${trapCoverage}/${totalEscapeRoutes} routes (${Math.round((trapCoverage / totalEscapeRoutes) * 100)}%)`,
-  )
 
   // SMART: Accept trap if we can block >= 75% routes (3/4 or 4/4)
   // BOMB ZONE TRAP: Don't need exact positions - explosion zones will cover escape routes!
   if (trapCoverage < 3) {
-    console.log(`      ❌ Not enough trap coverage (need 3/4, have ${trapCoverage}/4)`)
     return null
   }
 
   if (crossPositions.length === 0) {
-    console.log(`      ❌ No bombing positions available (all routes blocked or unwalkable)`)
     return null
   }
 
@@ -240,16 +225,6 @@ export function findCrossBombingPositions(player, enemy, map, bombs, myBomber) {
 
   const selectedPositions = crossPositions.slice(0, bombsNeeded)
 
-  console.log(
-    `      ✅ BOMB ZONE TRAP: ${selectedPositions.length} bomb(s) needed (range: ${range})`,
-  )
-  console.log(
-    `         Positions: ${selectedPositions.map((p) => `[${p.x},${p.y}] (${p.distanceToEnemy} tiles from enemy)`).join(" + ")}`,
-  )
-  console.log(
-    `         Explosion zones will block: ${blockedRoutes + selectedPositions.length}/4 escape routes`,
-  )
-  console.log(`         💡 Enemy doesn't need to step on bomb - zone coverage is enough!`)
 
   return {
     positions: selectedPositions,
@@ -263,18 +238,14 @@ export function findCrossBombingPositions(player, enemy, map, bombs, myBomber) {
  * @returns {Object|null} Bombing decision with sequence
  */
 export function decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, myUid) {
-  console.log(`\n💣 SPAM BOMBING ANALYSIS`)
-  console.log(`   Player: [${player.x},${player.y}] | Enemy: [${enemy.x},${enemy.y}]`)
 
   const remainingBombs = getRemainingBombs(myBomber, bombs, myUid)
   const distance = manhattanDistance(player.x, player.y, enemy.x, enemy.y)
   const range = myBomber.explosionRange || 2
 
-  console.log(`   Remaining bombs: ${remainingBombs} | Distance: ${distance} | Range: ${range}`)
 
   // Need at least 2 bombs for spam strategy
   if (remainingBombs < 2) {
-    console.log(`   ❌ Not enough bombs for spam (need 2+, have ${remainingBombs})`)
     return null
   }
 
@@ -295,9 +266,6 @@ export function decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, 
     const trailPlan = findTrailBombingPositions(player, enemy, map, bombs, myBomber)
 
     if (trailPlan && trailPlan.willHitEnemy) {
-      console.log(
-        `   ✅ TRAIL BOMBING selected (${trailPlan.totalBombs} bombs, range ${range}, distance ${distance})`,
-      )
       return {
         strategy: "TRAIL",
         positions: trailPlan.positions,
@@ -312,9 +280,6 @@ export function decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, 
     const crossPlan = findCrossBombingPositions(player, enemy, map, bombs, myBomber)
 
     if (crossPlan) {
-      console.log(
-        `   ✅ CROSS BOMBING selected (${crossPlan.totalBombs} bombs, range ${range}, distance ${distance})`,
-      )
       return {
         strategy: "CROSS",
         positions: crossPlan.positions,
@@ -327,9 +292,6 @@ export function decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, 
   // Strategy 3: Rapid spam (if very close, just spam bombs)
   // NOTE: distance must be >= 1 to avoid bombing self!
   if (distance >= rapidMinDistance && distance <= rapidMaxDistance && remainingBombs >= 2) {
-    console.log(
-      `   ✅ RAPID SPAM selected (enemy very close, range ${range}, distance: ${distance})`,
-    )
 
     // Bomb current position and prepare to spam more
     return {
@@ -342,11 +304,8 @@ export function decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, 
 
   // If distance = 0 (same position), this is a special case - should escape first!
   if (distance === 0) {
-    console.log(`   ⚠️ Distance = 0 (same position as enemy) - cannot spam bomb here!`)
-    console.log(`      Bot needs to move away before bombing`)
   }
 
-  console.log(`   ❌ No viable spam bombing strategy`)
   return null
 }
 
@@ -358,7 +317,6 @@ export function shouldContinueSpamming(player, enemy, bombs, myBomber, myUid, la
   const remainingBombs = getRemainingBombs(myBomber, bombs, myUid)
 
   if (remainingBombs === 0) {
-    console.log(`   ⏸️  Spam sequence complete (no bombs left)`)
     return false
   }
 
@@ -367,7 +325,6 @@ export function shouldContinueSpamming(player, enemy, bombs, myBomber, myUid, la
   const timeSinceLastBomb = lastBombTime ? now - lastBombTime : Infinity
 
   if (timeSinceLastBomb < 500) {
-    console.log(`   ⏸️  Waiting for spam cooldown (${timeSinceLastBomb}ms / 500ms)`)
     return false
   }
 
@@ -375,10 +332,8 @@ export function shouldContinueSpamming(player, enemy, bombs, myBomber, myUid, la
   const distance = manhattanDistance(player.x, player.y, enemy.x, enemy.y)
 
   if (distance > 6) {
-    console.log(`   ⏸️  Enemy too far (${distance} > 6), stopping spam`)
     return false
   }
 
-  console.log(`   💣 Continue spamming (${remainingBombs} bombs left, enemy at ${distance} tiles)`)
   return true
 }

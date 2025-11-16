@@ -197,12 +197,6 @@ export function decideEnemyBombing({
 
     if (trapOpportunities.length > 0) {
       const bestTrap = trapOpportunities[0]
-      console.log(
-        `   🎯 TRAP OPPORTUNITY! Target: Enemy | Trap Value: ${bestTrap.trapValue.toFixed(1)}`,
-      )
-      console.log(
-        `   Will Kill: ${bestTrap.willKill ? "YES" : "NO"} | Blocked Routes: ${bestTrap.escapeRoutes}`,
-      )
 
       if (bestTrap.willKill || (bestTrap.trapValue > 50 && riskTolerance > 0.6)) {
         const bombPos = bestTrap.bombPosition || player
@@ -219,19 +213,12 @@ export function decideEnemyBombing({
 
         if (!validation.valid) {
           if (validation.reason === "items") {
-            console.log(
-              `   ⚠️ Trap bomb would destroy ${validation.items.length} item(s) - skipping`,
-            )
           } else {
-            console.log(`   ❌ Trap validation failed: ${validation.reason}`)
           }
           return null
         }
 
         if (bombPos.x === player.x && bombPos.y === player.y) {
-          console.log(`   💣 Trapping enemy with bomb!`)
-          console.log(`🎯 DECISION: BOMB + ESCAPE (Enemy Trap)`)
-          console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
 
           return createDecision("BOMB", {
@@ -244,9 +231,6 @@ export function decideEnemyBombing({
         } else {
           const pathToTrap = findSafePath(map, player, [bombPos], bombs, bombers, myUid)
           if (pathToTrap && pathToTrap.path.length > 0) {
-            console.log(`   Moving to trap position: ${pathToTrap.path.join(" → ")}`)
-            console.log(`🎯 DECISION: Move to trap position`)
-            console.log("=".repeat(90) + "\n")
             trackDecision(player, pathToTrap.path[0])
 
             return createDecision(pathToTrap.path[0], {
@@ -263,7 +247,6 @@ export function decideEnemyBombing({
 
   // ADVANCED COMBAT MODE: Smart predictive & blocking strategies
   if (mode === "advanced_combat") {
-    console.log(`\n🧠 PHASE: Advanced Combat (Predictive & Blocking)`)
 
     // Try advanced combat for each nearby enemy
     for (const enemy of enemies) {
@@ -292,20 +275,12 @@ export function decideEnemyBombing({
           spamPlan,
         } = combatDecision
 
-        console.log(`   🎯 Advanced Combat: ${strategy}`)
-        console.log(`   Position: [${position.x},${position.y}] (${distanceToPosition} steps away)`)
 
         // SPAM BOMBING: Special handling for multi-bomb sequences
         if (strategy.startsWith("SPAM_")) {
-          console.log(`   💣💣💣 SPAM BOMBING MODE: ${spamPlan.strategy}`)
-          console.log(`      Total bombs planned: ${spamPlan.totalBombs}`)
-          console.log(
-            `      Positions: ${spamPlan.positions.map((p) => `[${p.x},${p.y}]`).join(" → ")}`,
-          )
 
           // If at first position, START SPAMMING
           if (player.x === position.x && player.y === position.y) {
-            console.log(`   💣 START SPAM SEQUENCE!`)
 
             // CRITICAL: Must validate escape path even for spam bombing!
             // Bot cannot spam continuously - must escape after each bomb
@@ -322,16 +297,9 @@ export function decideEnemyBombing({
             )
 
             if (!validation.valid) {
-              console.log(`   ❌ Spam bombing unsafe: ${validation.reason}`)
-              console.log("=".repeat(90) + "\n")
               return null
             }
 
-            console.log(
-              `   ✅ Spam bomb validated with escape: ${validation.escapePath.path.join(" → ")}`,
-            )
-            console.log(`🎯 DECISION: BOMB (Spam ${spamPlan.strategy}) + ESCAPE`)
-            console.log("=".repeat(90) + "\n")
             trackDecision(player, "BOMB")
 
             // After bombing, MUST escape immediately
@@ -351,9 +319,6 @@ export function decideEnemyBombing({
           const pathToSpam = findSafePath(map, player, [position], bombs, bombers, myUid)
 
           if (pathToSpam && pathToSpam.path.length > 0) {
-            console.log(`   🚶 Moving to spam position...`)
-            console.log(`🎯 DECISION: MOVE (Spam Setup)`)
-            console.log("=".repeat(90) + "\n")
             trackDecision(player, pathToSpam.path[0])
 
             return createDecision(pathToSpam.path[0], {
@@ -365,9 +330,6 @@ export function decideEnemyBombing({
         // NORMAL BOMBING: Single bomb with escape
         // If we're already at the position, BOMB NOW
         if (player.x === position.x && player.y === position.y) {
-          console.log(`   💣 ALREADY at combat position - BOMBING NOW!`)
-          console.log(`🎯 DECISION: BOMB (${strategy})`)
-          console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
 
           return createDecision("BOMB", {
@@ -383,11 +345,6 @@ export function decideEnemyBombing({
         const pathToPosition = findSafePath(map, player, [position], bombs, bombers, myUid)
 
         if (pathToPosition && pathToPosition.path.length > 0) {
-          console.log(
-            `   🚶 Moving to combat position: ${pathToPosition.path.slice(0, 3).join(" → ")}`,
-          )
-          console.log(`🎯 DECISION: MOVE (Advanced Combat Setup - ${strategy})`)
-          console.log("=".repeat(90) + "\n")
           trackDecision(player, pathToPosition.path[0])
 
           // CRITICAL: Don't return fullPath when pursuing enemy
@@ -397,12 +354,10 @@ export function decideEnemyBombing({
             mode: `advanced_${strategy}_setup`,
           })
         } else {
-          console.log(`   ❌ No safe path to combat position`)
         }
       }
     }
 
-    console.log(`   ℹ️ No advanced combat opportunities found`)
     return null
   }
 
@@ -413,7 +368,6 @@ export function decideEnemyBombing({
 
       if (distanceToEnemy > maxDistance) continue
 
-      console.log(`   🎯 Pursuing enemy at [${enemy.x},${enemy.y}] (distance: ${distanceToEnemy})`)
 
       // Use range-based positions (not just adjacent) for flexible bombing
       const rangeBombingPositions = findRangeBasedBombingPositions(
@@ -434,9 +388,6 @@ export function decideEnemyBombing({
       )
 
       if (withinRange) {
-        console.log(
-          `   💣 ALREADY within bomb range (${distanceToEnemy} tiles)! Attempting to bomb...`,
-        )
 
         const validation = validateBombAndEscape(
           player,
@@ -449,11 +400,6 @@ export function decideEnemyBombing({
         )
 
         if (validation.valid) {
-          console.log(
-            `   ✅ PRIORITY PURSUIT: Bombing enemy at ${distanceToEnemy} tiles distance NOW!`,
-          )
-          console.log(`🎯 DECISION: BOMB ENEMY (Range Attack - ${distanceToEnemy} tiles)`)
-          console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
 
           return createDecision("BOMB", {
@@ -464,13 +410,9 @@ export function decideEnemyBombing({
             mode: "priority_pursuit_bomb",
           })
         } else {
-          console.log(`   ❌ Cannot bomb: ${validation.reason}`)
         }
       } else if (rangeBombingPositions.length > 0) {
         // Not within range yet - path to range-based bombing positions
-        console.log(
-          `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
-        )
         const pathToEnemy = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
 
         if (pathToEnemy && pathToEnemy.path.length > 0) {
@@ -487,12 +429,6 @@ export function decideEnemyBombing({
           )
 
           if (validation.valid) {
-            console.log(
-              `   ✅ PRIORITY PURSUIT: Path to range bombing position found (${pathToEnemy.path.length} steps)`,
-            )
-            console.log(`      Can bomb and escape after reaching position`)
-            console.log(`🎯 DECISION: PURSUE ENEMY (Priority - Range Based)`)
-            console.log("=".repeat(90) + "\n")
             trackDecision(player, pathToEnemy.path[0])
 
             // CRITICAL: Don't use fullPath when chasing enemy
@@ -502,7 +438,6 @@ export function decideEnemyBombing({
               mode: "priority_pursuit",
             })
           } else if (validation.reason === "items") {
-            console.log(`   ⚠️ Would destroy items, skipping this enemy`)
           }
         }
       }
@@ -524,25 +459,16 @@ export function decideEnemyBombing({
       if (!inRange) continue
 
       const distance = manhattanDistance(player.x, player.y, enemy.x, enemy.y)
-      console.log(
-        `   ⚔️ Enemy within bomb range at [${enemy.x},${enemy.y}] (${distance} tiles) - DEFENSE MODE!`,
-      )
 
       if (!canPlaceBomb(myBomber, bombs, myUid)) {
-        console.log("   ⚠️ No bombs available for defense (all bombs already placed)")
         continue
       }
 
       const bombPos = toBombGridCoords(myBomber.x, myBomber.y)
-      console.log(
-        `   📍 Bot at grid [${player.x}, ${player.y}], bomb will be placed at [${bombPos.x}, ${bombPos.y}]`,
-      )
 
       const validation = validateBombAndEscape(bombPos, enemy, map, bombs, bombers, myBomber, myUid)
 
       if (validation.valid) {
-        console.log(`   ✅ DEFENSE BOMB: Can bomb adjacent enemy and escape!`)
-        console.log(`      Escape: ${validation.escapePath.path.join(" → ")}`)
 
         return createDecision("BOMB", {
           isEscape: true,
@@ -553,15 +479,8 @@ export function decideEnemyBombing({
         })
       } else {
         if (validation.reason === "items") {
-          console.log(
-            `   ⚠️ Bombing would destroy ${validation.items.length} item(s):`,
-            validation.items.map((i) => `${i.type} at [${i.x},${i.y}]`).join(", "),
-          )
-          console.log("   ⚠️ Skipping enemy bomb to preserve items")
         } else if (validation.reason === "no_hit") {
-          console.log("   ⚠️ Bomb here would not reach enemy")
         } else {
-          console.log(`   ❌ Cannot escape after bombing - ${validation.reason}`)
         }
       }
     }
@@ -570,7 +489,6 @@ export function decideEnemyBombing({
 
   // PURSUIT MODE: Chase enemies (FIGHT mode only)
   if (mode === "pursuit") {
-    console.log(`   🎯 FIGHT mode - actively pursuing enemies`)
 
     for (const enemy of enemies) {
       // Use range-based positions (not just adjacent) for flexible bombing
@@ -583,20 +501,13 @@ export function decideEnemyBombing({
       )
 
       if (rangeBombingPositions.length === 0) {
-        console.log(
-          `   ℹ️ No valid range-based bombing positions for enemy at [${enemy.x},${enemy.y}]`,
-        )
         continue
       }
 
-      console.log(
-        `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
-      )
       const pathToPosition = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
       if (!pathToPosition || pathToPosition.path.length === 0) continue
 
       if (!canPlaceBomb(myBomber, bombs, myUid)) {
-        console.log("   ⚠️ No bombs available (all bombs already placed), chasing enemy")
         trackDecision(player, pathToPosition.path[0])
         // CRITICAL: No fullPath when chasing - enemy can move
         return createDecision(pathToPosition.path[0], {
@@ -618,8 +529,6 @@ export function decideEnemyBombing({
       )
 
       if (validation.valid) {
-        console.log(`   ✅ Plan: move to range bombing position and BOMB+ESCAPE`)
-        console.log("   🎯 DECISION: MOVE (towards enemy - range based)")
         trackDecision(player, pathToPosition.path[0])
 
         // CRITICAL: No fullPath when chasing - enemy can move
@@ -628,7 +537,6 @@ export function decideEnemyBombing({
           mode: "pursuit",
         })
       } else if (validation.reason === "items") {
-        console.log(`   ⚠️ Final bomb position would destroy items - skipping attack plan`)
       }
     }
     return null

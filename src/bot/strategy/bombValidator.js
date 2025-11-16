@@ -104,17 +104,8 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   const ESCAPE_SAFETY_BUFFER = BASE_BUFFER * bombCountFactor
   const availableTime = BOMB_EXPLOSION_TIME - ESCAPE_SAFETY_BUFFER
 
-  console.log(
-    `   ⏱️  Escape timing: ${stepsNeeded} steps × ${timePerStep.toFixed(0)}ms + ${alignmentOverhead.toFixed(0)}ms align = ${totalEscapeTime.toFixed(0)}ms`,
-  )
-  console.log(
-    `   📊 Buffer: ${ESCAPE_SAFETY_BUFFER.toFixed(0)}ms (base ${BASE_BUFFER.toFixed(0)}ms × bombCount ${bombCountFactor.toFixed(2)}x) | Available: ${availableTime.toFixed(0)}ms`,
-  )
 
   if (totalEscapeTime >= availableTime) {
-    console.log(
-      `   ❌ ESCAPE TOO SLOW: Need ${totalEscapeTime.toFixed(0)}ms but only ${availableTime.toFixed(0)}ms available - REFUSING TO BOMB (suicide prevention)`,
-    )
     return {
       canBomb: false,
       escapePath: escapePath.path,
@@ -139,9 +130,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   const unsafeTilesAfterBomb = findUnsafeTiles(map, futureBombs, bombers)
   const finalPosKey = `${finalX},${finalY}`
   if (unsafeTilesAfterBomb.has(finalPosKey)) {
-    console.log(
-      `   ❌ ESCAPE DESTINATION UNSAFE: [${finalX}, ${finalY}] is in blast zone - REFUSING TO BOMB (suicide prevention)`,
-    )
     return {
       canBomb: false,
       escapePath: null,
@@ -164,10 +152,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
   )
 
   if (!secondEscapePath || secondEscapePath.path.length === 0) {
-    console.log(
-      `   ❌ ESCAPE DESTINATION TRAPPED: [${finalX}, ${finalY}] has no further escape - REFUSING TO BOMB (deadlock prevention)`,
-    )
-    console.log(`      (Can escape immediate bomb, but will be trapped by surrounding bombs/walls)`)
     return {
       canBomb: false,
       escapePath: null,
@@ -175,12 +159,6 @@ export function validateBombSafety(bombPos, map, bombs, bombers, myBomber, myUid
     }
   }
 
-  console.log(
-    `   ✅ BOMB VALIDATED: Escape to [${finalX}, ${finalY}] is safe with ${(availableTime - totalEscapeTime).toFixed(0)}ms margin`,
-  )
-  console.log(
-    `      Secondary escape available: ${secondEscapePath.path.length > 0 ? secondEscapePath.path.join(" → ") : "already safe"}`,
-  )
 
   return {
     canBomb: true,

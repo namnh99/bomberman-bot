@@ -82,15 +82,11 @@ export function findBestPath(
           if (!isSafeByTiming) {
             // Timing unsafe - absolutely avoid
             if (nextStepCount <= 3) {
-              console.log(`      ⚠️  Avoiding bomb zone at [${nx}, ${ny}] - timing unsafe`)
             }
             continue
           }
           // If safe by timing, allow passage (RISKY!)
           if (nextStepCount <= 3) {
-            console.log(
-              `      ⚠️  RISKY: Crossing bomb zone at [${nx}, ${ny}] - timing calculated as safe`,
-            )
           }
         } else {
           // Default: NEVER cross bomb zones (SAFE STRATEGY)
@@ -136,9 +132,6 @@ export function findSafePath(map, start, targets, bombs, allBombers, myUid) {
   const safePath = findBestPath(map, start, targets, bombs, allBombers, myUid, false, false)
 
   if (safePath) {
-    console.log(
-      `   ✅ Safe path found: ${safePath.path.join(" → ")} (${safePath.path.length} steps)`,
-    )
     return safePath
   }
 
@@ -146,9 +139,6 @@ export function findSafePath(map, start, targets, bombs, allBombers, myUid) {
   const riskyPath = findBestPath(map, start, targets, bombs, allBombers, myUid, false, true)
 
   if (riskyPath) {
-    console.log(
-      `   ⚠️  RISKY path found: ${riskyPath.path.join(" → ")} (${riskyPath.path.length} steps) - crosses bomb zones!`,
-    )
     return riskyPath
   }
 

@@ -23,7 +23,6 @@ class MoveQueueManager {
     // Don't queue duplicate consecutive moves
     const lastInQueue = this.queue[this.queue.length - 1]
     if (lastInQueue && lastInQueue.direction === direction && lastInQueue.priority === priority) {
-      // console.log(`   ⏭️ Skipping duplicate move: ${direction}`)
       return
     }
 
@@ -34,7 +33,6 @@ class MoveQueueManager {
       id: ++this.moveCount,
     })
 
-    // console.log(`   📥 Queued move #${this.moveCount}: ${direction} (queue: ${this.queue.length})`)
 
     // Start processing if not already
     if (!this.isProcessing) {
@@ -69,7 +67,6 @@ class MoveQueueManager {
       this.pendingMove = move
       this.lastMoveTime = Date.now()
 
-      // console.log(`   📤 Sending move #${move.id}: ${move.direction}`)
 
       // Emit to server (will be set by init)
       if (this.socket) {
@@ -154,7 +151,6 @@ class MoveQueueManager {
    * Clear the queue (for emergency stops)
    */
   clear() {
-    // console.log(`   🧹 Clearing move queue (${this.queue.length} moves)`)
     this.queue = []
     this.pendingMove = null
     this.isProcessing = false
@@ -165,7 +161,6 @@ class MoveQueueManager {
    * Use this when interrupting movement (e.g., changing direction)
    */
   abort(reason = "Movement aborted") {
-    // console.log(`   🚫 ${reason} - clearing queue (${this.queue.length} moves pending)`)
     this.queue = []
     // Don't clear pendingMove - let it complete to avoid desync
     // Just stop processing new moves
@@ -193,7 +188,6 @@ class MoveQueueManager {
   init(socket) {
     this.socket = socket
     this.confirmCallbacks = new Map()
-    // console.log('   🎮 Move Queue Manager initialized')
   }
 
   /**

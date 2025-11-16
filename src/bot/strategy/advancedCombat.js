@@ -80,14 +80,11 @@ export function findBlockingBombPosition(
   myBomber,
   explosionRange,
 ) {
-  console.log(`   🎯 Analyzing enemy escape routes at [${enemy.x},${enemy.y}]...`)
 
   // Get enemy's possible escape routes
   const escapeRoutes = findEnemyEscapeRoutes(enemy, map, bombs, 4)
-  console.log(`   📍 Found ${escapeRoutes.length} potential escape routes`)
 
   if (escapeRoutes.length === 0) {
-    console.log(`   ⚠️ No escape routes found - enemy might be trapped already`)
     return null
   }
 
@@ -163,7 +160,6 @@ export function findBlockingBombPosition(
   }
 
   if (blockingPositions.length === 0) {
-    console.log(`   ❌ No blocking positions found`)
     return null
   }
 
@@ -171,9 +167,6 @@ export function findBlockingBombPosition(
   blockingPositions.sort((a, b) => b.score - a.score)
 
   const best = blockingPositions[0]
-  console.log(
-    `   ✅ Best blocking position: [${best.x},${best.y}] (blocks ${best.blockedRoutes} routes, ${best.hitEnemy ? "HITS ENEMY" : "blocks escape"})`,
-  )
 
   return best
 }
@@ -217,20 +210,17 @@ export function findPredictiveBombPosition(
   myBomber,
   explosionRange,
 ) {
-  console.log(`   🔮 Predictive bombing analysis for enemy at [${enemy.x},${enemy.y}]...`)
 
   // Predict enemy positions for next 3 ticks
   const predictions = predictEnemyPositions([enemy], map, bombs, 3)
 
   if (predictions.length === 0 || predictions[0].predictedPositions.length === 0) {
-    console.log(`   ⚠️ No predictions available`)
     return null
   }
 
   const prediction = predictions[0]
   const highProbPositions = prediction.predictedPositions.filter((p) => p.probability > 0.15)
 
-  console.log(`   📊 ${highProbPositions.length} high-probability positions`)
 
   // Find positions where we can bomb to hit predicted enemy location
   const bombPositions = []
@@ -272,7 +262,6 @@ export function findPredictiveBombPosition(
   }
 
   if (bombPositions.length === 0) {
-    console.log(`   ❌ No predictive bomb positions found`)
     return null
   }
 
@@ -280,9 +269,6 @@ export function findPredictiveBombPosition(
   bombPositions.sort((a, b) => b.score - a.score)
 
   const best = bombPositions[0]
-  console.log(
-    `   ✅ Best predictive position: [${best.x},${best.y}] (prob: ${(best.probability * 100).toFixed(0)}%, ${best.predictedSteps} steps ahead)`,
-  )
 
   return best
 }
@@ -295,15 +281,11 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
   const distance = manhattanDistance(enemy.x, enemy.y, player.x, player.y)
   const explosionRange = myBomber.explosionRange
 
-  console.log(`\n🎯 ADVANCED COMBAT ANALYSIS`)
-  console.log(`   Enemy at [${enemy.x},${enemy.y}], distance: ${distance}`)
-  console.log(`   Explosion range: ${explosionRange}`)
 
   // PRIORITY: Check spam bombing (if have 2+ bombs, try to spam)
   const spamPlan = decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, myUid)
 
   if (spamPlan) {
-    console.log(`   💣 SPAM BOMBING available: ${spamPlan.strategy} (${spamPlan.totalBombs} bombs)`)
     // Return spam plan to be executed
     return {
       position: spamPlan.firstPosition,
@@ -323,7 +305,6 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
   // Strategy 1: Check if enemy is vulnerable (corner/trapped)
   const vulnerable = isEnemyVulnerable(enemy, map, bombs)
   if (vulnerable) {
-    console.log(`   💀 Enemy is VULNERABLE (limited escape options)`)
   }
 
   // Strategy 2: Find blocking positions (cut off escape routes)
@@ -356,26 +337,21 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
     // Vulnerable enemy + close blocking position = PRIORITY
     chosenPosition = blockingPos
     strategy = "VULNERABLE_TRAP"
-    console.log(`   ✅ Strategy: VULNERABLE TRAP (enemy has limited escape)`)
   } else if (blockingPos && blockingPos.hitEnemy && blockingPos.distanceFromPlayer <= 3) {
     // Direct hit + close = HIGH PRIORITY
     chosenPosition = blockingPos
     strategy = "DIRECT_HIT"
-    console.log(`   ✅ Strategy: DIRECT HIT (bomb hits enemy directly)`)
   } else if (blockingPos && blockingPos.blockedRoutes >= 3) {
     // Blocks many routes = GOOD TRAP
     chosenPosition = blockingPos
     strategy = "ESCAPE_BLOCKING"
-    console.log(`   ✅ Strategy: ESCAPE BLOCKING (blocks ${blockingPos.blockedRoutes} routes)`)
   } else if (predictivePos && predictivePos.probability > 0.3) {
     // High probability prediction
     chosenPosition = predictivePos
     strategy = "PREDICTIVE"
-    console.log(`   ✅ Strategy: PREDICTIVE (high probability hit)`)
   } else if (distance <= explosionRange + 1) {
     // Enemy within range - try range bombing
     strategy = "RANGE_BOMB"
-    console.log(`   ✅ Strategy: RANGE BOMB (enemy in explosion range)`)
 
     // Find position between player and enemy
     const dx = Math.sign(enemy.x - player.x)
@@ -401,13 +377,11 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
   }
 
   if (!chosenPosition) {
-    console.log(`   ❌ No viable combat strategy found`)
     return null
   }
 
   // Validate chosen position
   if (!isWalkable(chosenPosition.x, chosenPosition.y, map)) {
-    console.log(`   ❌ Chosen position not walkable`)
     return null
   }
 
@@ -419,7 +393,6 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
 
   const futureSafeTiles = findSafeTiles(map, futureBombs, bombers, myBomber)
   if (futureSafeTiles.length === 0) {
-    console.log(`   ❌ No safe tiles after bombing`)
     return null
   }
 
@@ -434,11 +407,9 @@ export function decideAdvancedCombat(enemy, player, map, bombs, bombers, myBombe
   )
 
   if (!escapePath || escapePath.path.length === 0) {
-    console.log(`   ❌ No escape path from bombing position`)
     return null
   }
 
-  console.log(`   ✅ Escape validated: ${escapePath.path.length} steps to safety`)
 
   return {
     position: chosenPosition,

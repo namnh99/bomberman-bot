@@ -16,17 +16,11 @@ export class ManualControlManager {
 
   toggleMode() {
     this.manualMode = !this.manualMode
-    console.log(
-      `\n🔄 Mode switched to: ${this.manualMode ? "🎮 MANUAL CONTROL" : "🤖 AI CONTROL"}\n`,
-    )
     return this.manualMode
   }
 
   toggleMovementType() {
     this.useSmootMovesInManual = !this.useSmootMovesInManual
-    console.log(
-      `\n🔄 Movement type: ${this.useSmootMovesInManual ? "📏 Smooth (full cell)" : "👣 Step-by-step"}\n`,
-    )
     return this.useSmootMovesInManual
   }
 
@@ -45,33 +39,12 @@ export function setupManualControl(
   onModeToggle,
   getCurrentState,
 ) {
-  console.log("\n" + "=".repeat(80))
-  console.log("🎮 MANUAL CONTROL ENABLED")
-  console.log("=".repeat(80))
-  console.log("Controls:")
-  console.log("  W / w / ↑ - Move UP")
-  console.log("  S / s / ↓ - Move DOWN")
-  console.log("  A / a / ← - Move LEFT")
-  console.log("  D / d / → - Move RIGHT")
-  console.log("  SPACE / B / b - Place BOMB")
-  console.log("  M / m - Toggle Manual/AI mode")
-  console.log("  T / t - Toggle smooth/step movement (manual mode)")
-  console.log("  Q / q - Quit")
-  console.log("=".repeat(80))
-  console.log(`Current Mode: ${manualControlManager.isManualMode() ? "🎮 MANUAL" : "🤖 AI"}`)
-  console.log(
-    `Movement Type: ${manualControlManager.useSmoothMoves() ? "📏 Smooth (full cell)" : "👣 Step-by-step"}`,
-  )
-  console.log("=".repeat(80) + "\n")
-  console.log("⌨️  Keyboard listener active - press any key to test...")
 
   // Setup readline for keyboard input
   readline.emitKeypressEvents(process.stdin)
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true)
-    console.log("✅ Terminal is in raw mode (keyboard ready)")
   } else {
-    console.log("⚠️  Warning: Terminal is not TTY - keyboard input may not work")
   }
 
   process.stdin.on("keypress", (str, key) => {
@@ -82,7 +55,6 @@ export function setupManualControl(
 
     // Handle quit
     if (key && key.name === "q") {
-      console.log("\n👋 Quitting...")
       process.exit()
     }
 
@@ -91,7 +63,6 @@ export function setupManualControl(
 
     // Need game state for movement commands
     if (!currentState || !myUid) {
-      console.log("⚠️  Waiting for game state...")
       return
     }
 
@@ -121,7 +92,6 @@ export function setupManualControl(
 
     const myBomber = currentState.bombers.find((b) => b.uid === myUid)
     if (!myBomber) {
-      console.log("⚠️  Bomber not found in game state")
       return
     }
 
@@ -149,16 +119,11 @@ export function setupManualControl(
         break
       case "space":
       case "b":
-        console.log("💣 Placing bomb (manual)")
         onBomb()
         return
     }
 
     if (action) {
-      console.log(`\n🎮 Manual control: ${action}`)
-      console.log(
-        `   Current: [${Math.floor(myBomber.x / GRID_SIZE)}, ${Math.floor(myBomber.y / GRID_SIZE)}] | Pixel: [${myBomber.x}, ${myBomber.y}]`,
-      )
 
       onMove(action, manualControlManager.useSmoothMoves())
     }
