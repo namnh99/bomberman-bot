@@ -16,6 +16,7 @@ import { decideAdvancedCombat } from "./advancedCombat.js"
 
 /**
  * Calculate how many enemy escape routes this bomb position would block
+ * IMPROVED: Check deeper escape routes (2 tiles) for better trap detection
  */
 function calculateTrapScore(bombX, bombY, enemy, map, range) {
   let blockedRoutes = 0
@@ -24,29 +25,39 @@ function calculateTrapScore(bombX, bombY, enemy, map, range) {
   for (const [dx, dy] of DIRS) {
     let routeBlocked = false
 
-    // Check if this escape route is blocked by wall/bomb already
-    const escapeX = enemy.x + dx
-    const escapeY = enemy.y + dy
-    if (!isWalkable(escapeX, escapeY, map)) {
+    // Check escape route (2 tiles deep for better coverage)
+    const escapePositions = [
+      { x: enemy.x + dx, y: enemy.y + dy }, // 1st tile
+      { x: enemy.x + dx * 2, y: enemy.y + dy * 2 }, // 2nd tile
+    ]
+
+    // If first tile is blocked by wall, entire route is blocked
+    if (!isWalkable(escapePositions[0].x, escapePositions[0].y, map)) {
       blockedRoutes++
       continue
     }
 
-    // Check if bomb explosion would cover this escape route
-    // Bomb creates explosion in 4 directions up to range
-    for (const [bdx, bdy] of DIRS) {
-      for (let step = 0; step <= range; step++) {
-        const expX = bombX + bdx * step
-        const expY = bombY + bdy * step
+    // Check if bomb explosion would cover ANY of the escape tiles
+    for (const escapePos of escapePositions) {
+      // Check if this tile is walkable
+      if (!isWalkable(escapePos.x, escapePos.y, map)) break
 
-        // Check if explosion hits the escape tile
-        if (expX === escapeX && expY === escapeY) {
-          routeBlocked = true
-          break
+      // Check if bomb explosion hits this escape tile
+      for (const [bdx, bdy] of DIRS) {
+        for (let step = 0; step <= range; step++) {
+          const expX = bombX + bdx * step
+          const expY = bombY + bdy * step
+
+          // Check if explosion hits the escape tile
+          if (expX === escapePos.x && expY === escapePos.y) {
+            routeBlocked = true
+            break
+          }
+
+          // Stop if hit wall
+          if (!isWalkable(expX, expY, map) && !(expX === bombX && expY === bombY)) break
         }
-
-        // Stop if hit wall
-        if (!isWalkable(expX, expY, map) && !(expX === bombX && expY === bombY)) break
+        if (routeBlocked) break
       }
       if (routeBlocked) break
     }

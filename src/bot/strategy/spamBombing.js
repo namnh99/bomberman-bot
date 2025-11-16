@@ -218,22 +218,40 @@ export function findCrossBombingPositions(player, enemy, map, bombs, myBomber) {
     return null
   }
 
-  // SMART SORT: Prioritize positions with:
-  // 1. Better coverage (closer to enemy = explosion zone covers more of escape route)
-  // 2. Closer to player (faster to reach)
-  crossPositions.sort((a, b) => {
-    // Primary: Better coverage (closer to enemy)
-    if (a.coverageScore !== b.coverageScore) {
-      return a.coverageScore - b.coverageScore
-    }
-    // Secondary: Closer to player
-    return a.distanceFromPlayer - b.distanceFromPlayer
-  })
+  // SMART SORT: Prioritize COMPLETING THE TRAP over distance optimization!
+  // Goal: Block as many escape routes as possible to guarantee kill
+  // Strategy:
+  // 1. If have enough bombs → bomb ALL open routes (complete trap)
+  // 2. If limited bombs → prioritize closer positions
+  const canCompleteTrap = remainingBombs >= openRoutes
 
-  // SMART: Take minimum bombs needed to reach 75-100% trap coverage
-  // BOMB ZONE STRATEGY: Each bomb creates explosion zone covering entire escape route!
+  if (canCompleteTrap) {
+    // TRAP COMPLETION MODE: Bomb ALL open routes regardless of distance
+    // Sort by coverage first (ensure good explosion zone coverage)
+    crossPositions.sort((a, b) => a.coverageScore - b.coverageScore)
+
+    console.log(
+      `      🎯 TRAP COMPLETION MODE: Have ${remainingBombs} bombs for ${openRoutes} open routes`,
+    )
+  } else {
+    // LIMITED BOMBS MODE: Prioritize closest positions
+    crossPositions.sort((a, b) => {
+      // Primary: Better coverage (closer to enemy)
+      if (a.coverageScore !== b.coverageScore) {
+        return a.coverageScore - b.coverageScore
+      }
+      // Secondary: Closer to player (faster to reach)
+      return a.distanceFromPlayer - b.distanceFromPlayer
+    })
+
+    console.log(
+      `      ⚠️ LIMITED BOMBS MODE: Only ${remainingBombs} bombs for ${openRoutes} open routes`,
+    )
+  }
+
+  // SMART: Take all positions if we can complete trap, otherwise take what we can
   const bombsNeeded = Math.min(
-    Math.max(1, 3 - blockedRoutes), // Need enough to reach 3/4 coverage
+    canCompleteTrap ? openRoutes : Math.max(1, 3 - blockedRoutes), // Complete trap OR reach 75% coverage
     crossPositions.length,
     remainingBombs,
   )

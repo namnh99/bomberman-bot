@@ -34,6 +34,7 @@ import {
   validateBombSafety,
   compareSingleVsMultiTarget,
   decideEnemyBombing,
+  decideSpamBombing,
 } from "./strategy/index.js"
 import { createFutureBomb } from "../utils/bombUtils.js"
 
@@ -660,9 +661,69 @@ export function decideNextAction(state, myUid) {
     }
   }
 
-  // PHASE 1.6: Chain Reaction Detection
+  // PHASE 1.6: Surround-Enemy Spam Bombing (Trap All Escape Routes)
+  if (fightOrFlee === "fight" && enemies.length > 0 && canPlaceBomb(myBomber, bombs, myUid)) {
+    console.log("\n🔍 PHASE 1.6: Surround-Enemy Spam Bombing (Trap All Escape Routes)")
+    for (const enemy of enemies) {
+      const spamPlan = decideSpamBombing(player, enemy, map, bombs, bombers, myBomber, myUid)
+      // Chỉ cho phép spam cross khi đủ vị trí trap (không spam RAPID vô nghĩa)
+      if (
+        spamPlan &&
+        spamPlan.strategy === "CROSS" &&
+        spamPlan.positions.length >= 2 &&
+        spamPlan.positions.length <= getRemainingBombs(myBomber, bombs, myUid)
+      ) {
+        // All open routes can be bombed (trap)
+        console.log(
+          `   🎯 Surround-enemy spam bombing: ${spamPlan.positions.length} bombs to trap enemy at [${enemy.x},${enemy.y}]`,
+        )
+        activeSpamSequence = {
+          positions: spamPlan.positions,
+          target: { x: enemy.x, y: enemy.y },
+          targetEnemy: { id: enemy.id, x: enemy.x, y: enemy.y },
+          strategy: "cross",
+          currentIndex: 0,
+        }
+        lastSpamBombTime = Date.now()
+        // If already at first position, bomb immediately
+        const firstPos = spamPlan.positions[0]
+        if (player.x === firstPos.x && player.y === firstPos.y) {
+          console.log(`   💣 Start surround-enemy spam: Bombing at [${firstPos.x},${firstPos.y}]`)
+          trackDecision(player, "BOMB")
+          return {
+            action: "BOMB",
+            isEscape: true,
+            mode: "spam_cross_start",
+          }
+        } else {
+          // Move to first spam position
+          // Use aggressive pathfinding (allow timing crossing)
+          const pathToFirst = findBestPath(
+            map,
+            player,
+            [firstPos],
+            bombs,
+            bombers,
+            myUid,
+            false,
+            true,
+          )
+          if (pathToFirst && pathToFirst.path.length > 0) {
+            console.log(`   🚶 Move to surround-enemy spam position: [${firstPos.x},${firstPos.y}]`)
+            trackDecision(player, pathToFirst.path[0])
+            return {
+              action: pathToFirst.path[0],
+              mode: "spam_cross_move",
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // PHASE 1.7: Chain Reaction Detection
   if (bombs.length > 0 && canPlaceBomb(myBomber, bombs, myUid) && riskTolerance > 0.5) {
-    console.log("\n🔍 PHASE 1.6: Chain Reaction Detection")
+    console.log("\n🔍 PHASE 1.7: Chain Reaction Detection")
     const chainOpportunities = findChainReactionOpportunities(
       player,
       map,
@@ -1508,6 +1569,29 @@ export function decideNextAction(state, myUid) {
 
   // PHASE 6: Explore
   console.log(`\n🔍 PHASE 6: Exploration`)
+
+  // CRITICAL: Check for imminent bombs before exploring!
+  // If bombs exploding soon (< 500ms), must escape first, not explore!
+  const explorationTime = Date.now()
+  const imminentBombs = bombs.filter((bomb) => {
+    const timeRemaining = bomb.lifeTime - (explorationTime - (bomb.createdAt || explorationTime))
+    return timeRemaining > 0 && timeRemaining < 500
+  })
+
+  if (imminentBombs.length > 0) {
+    console.log(`   ⚠️ IMMINENT DANGER: ${imminentBombs.length} bomb(s) exploding in < 500ms!`)
+    imminentBombs.forEach((b) => {
+      const { gridX, gridY } = getBombWithGrid(b)
+      const timeLeft = b.lifeTime - (explorationTime - (b.createdAt || explorationTime))
+      console.log(`      💣 Bomb at [${gridX},${gridY}] explodes in ${timeLeft.toFixed(0)}ms`)
+    })
+    console.log(`   🚨 ABORT EXPLORATION - Must escape imminent danger first!`)
+    console.log(`🎯 DECISION: STAY (Imminent danger - waiting for explosion)`)
+    console.log("=".repeat(90) + "\n")
+    trackDecision(player, "STAY")
+    return { action: "STAY" }
+  }
+
   console.log(`   Safe tiles available: ${safeTiles.length}`)
 
   // Debug: Check immediate surroundings

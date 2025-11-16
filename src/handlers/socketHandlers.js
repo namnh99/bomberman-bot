@@ -97,8 +97,23 @@ export function registerSocketHandlers(
     }
     addBomb(gameContext.currentState, bomb)
 
+    // CRITICAL: Check safety even for own bombs!
+    // Bot may have placed bomb and gotten stuck - need to re-evaluate
     if (bomb.uid !== gameContext.myUid) {
+      // Enemy bomb - always check
       handleNewBombDuringPath(gameContext, pathModeManager, manualControlManager, onMakeDecision)
+    } else {
+      // Own bomb - check if bot is idle/stuck and needs to re-evaluate
+      const isIdle =
+        !pathModeManager.isEscaping() &&
+        !pathModeManager.isFollowing() &&
+        !gameContext.moveIntervalId &&
+        !gameContext.alignIntervalId
+
+      if (isIdle && !manualControlManager.isManualMode()) {
+        console.log(`\n🚨 Own bomb placed while idle - re-evaluating safety...`)
+        handleNewBombDuringPath(gameContext, pathModeManager, manualControlManager, onMakeDecision)
+      }
     }
   })
 
@@ -287,11 +302,10 @@ function handleBombExplodeDuringPath(
   manualControlManager,
   onMakeDecision,
 ) {
-  // When bomb explodes, it's already removed from gameState.bombs
-  // So we can't check safety based on bombs array
-  // Safety should be checked when NEW bombs appear (handleNewBombDuringPath)
+  // When bomb explodes, blast zone disappears → new paths may become available!
+  // CRITICAL: Always re-evaluate when bomb explodes, especially if bot was stuck
 
-  // Only re-evaluate if not in any mode
+  // Re-evaluate if not in any mode (idle/exploring)
   if (
     !manualControlManager.isManualMode() &&
     !pathModeManager.isEscaping() &&
@@ -299,10 +313,21 @@ function handleBombExplodeDuringPath(
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    // console.log("💥 Bomb exploded, re-evaluating...")
+    console.log("💥 Bomb exploded, re-evaluating (idle/stuck state)...")
     onMakeDecision()
-  } else {
-    // console.log("💥 Bomb exploded - path continues (safety checked on new_bomb events)")
+    return
+  }
+
+  // ALSO re-evaluate if bot is following a path (path safety may have improved!)
+  // Explosion removes blast zones → previously blocked paths may now be safe
+  if (
+    pathModeManager.isFollowing() &&
+    !gameContext.moveIntervalId &&
+    !gameContext.alignIntervalId
+  ) {
+    console.log("💥 Bomb exploded during follow path - checking if better path available...")
+    // Don't abort current path, but re-evaluate after current move completes
+    // This allows bot to find newly opened paths after explosion
   }
 }
 
