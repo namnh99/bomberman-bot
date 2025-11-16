@@ -1,4 +1,4 @@
-import { ITEMS } from "../utils/constants.js"
+import { ITEMS, DIRS } from "../utils/constants.js"
 import { toGridCoords } from "../utils/gridUtils.js"
 import { getBombWithGrid } from "../utils/bombUtils.js"
 import { findUnsafeTiles } from "../bot/agent.js"
@@ -210,21 +210,9 @@ function handleNewBombDuringPath(
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     if (myBomber) {
-      const playerGridPos = toGridCoords(myBomber.x, myBomber.y)
-
       const escapePath = pathModeManager.escapePath
       const escapeCoordinates = pathModeManager.getEscapeCoordinates()
 
-      const unsafeTiles = findUnsafeTiles(
-        gameContext.currentState.map,
-        gameContext.currentState.bombs,
-        gameContext.currentState.bombers,
-      )
-
-      const currentUnsafe = unsafeTiles.has(`${playerGridPos.x},${playerGridPos.y}`)
-      console.log(
-        `   Current: [${playerGridPos.x}, ${playerGridPos.y}] ${currentUnsafe ? "❌ UNSAFE" : "✅ safe"}`,
-      )
       console.log(`   Escape path remaining: ${escapePath.join(" → ")}`)
 
       // Validate timing for entire escape path
@@ -258,13 +246,6 @@ function handleNewBombDuringPath(
       const followCoordinates = pathModeManager.getFollowCoordinates()
 
       console.log(`   Follow path remaining: ${followPath.join(" → ")}`)
-
-      const unsafeTiles = findUnsafeTiles(
-        gameContext.currentState.map,
-        gameContext.currentState.bombs,
-        gameContext.currentState.bombers,
-      )
-
       // Validate timing for entire follow path
       const isSafe = isPathSafeByTime(
         followCoordinates,
@@ -343,9 +324,7 @@ function handleBombExplodeDuringPath(
   // Safety should be checked when NEW bombs appear (handleNewBombDuringPath)
 
   // Only re-evaluate if not in any mode
-  if (gameContext.waitingForBombPlacement) {
-    console.log("💣 Waiting for bomb placement, ignoring bomb exploded event")
-  } else if (
+  if (
     !manualControlManager.isManualMode() &&
     !pathModeManager.isEscaping() &&
     !pathModeManager.isFollowing() &&
@@ -373,8 +352,6 @@ function handleChestDestroyedDuringPath(
 
   if (pathModeManager.isEscaping()) {
     console.log("🏃 Escape in progress, ignoring chest destroyed event")
-  } else if (gameContext.waitingForBombPlacement) {
-    console.log("💣 Waiting for bomb placement, ignoring chest destroyed event")
   } else if (
     !manualControlManager.isManualMode() &&
     !pathModeManager.isFollowing() &&

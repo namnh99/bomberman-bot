@@ -13,7 +13,7 @@ class MoveQueueManager {
     this.lastMoveTime = 0
     this.moveCount = 0
     this.confirmedMoves = 0
-    this.MIN_MOVE_INTERVAL = STEP_DELAY // Min 17ms between moves (server tick rate)
+    this.MIN_MOVE_INTERVAL = 1 // 1ms minimal throttle - effectively no delay, just prevents true burst
   }
 
   /**
@@ -76,15 +76,16 @@ class MoveQueueManager {
         this.socket.emit("move", { orient: move.direction })
       }
 
-      // Wait for confirmation or timeout
-      const confirmed = await this.waitForConfirmation(300) // 300ms timeout
+      // Don't wait for confirmation - let server handle it
+      // Confirmation tracking is optional (for stats only)
+      this.pendingMove = move
 
-      if (confirmed) {
-        this.confirmedMoves++
-        // console.log(`   ✅ Move #${move.id} confirmed (${this.confirmedMoves}/${this.moveCount})`)
-      } else {
-        // console.log(`   ⚠️ Move #${move.id} timeout - server may not have processed`)
-      }
+      // Optional: Track confirmation asynchronously (non-blocking)
+      this.waitForConfirmation(100).then((confirmed) => {
+        if (confirmed) {
+          this.confirmedMoves++
+        }
+      })
 
       this.pendingMove = null
     }

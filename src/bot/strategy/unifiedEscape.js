@@ -1,6 +1,6 @@
 import { DIRS, GRID_SIZE, STEP_DELAY } from "../../utils/constants.js"
 import { posKey, isWalkable, manhattanDistance } from "../../utils/gridUtils.js"
-import { getBombWithGrid } from "../../utils/bombUtils.js"
+import { getBombWithGrid, getBombRange } from "../../utils/bombUtils.js"
 import { findSafeTiles, findUnsafeTiles } from "../pathfinding/dangerMap.js"
 import { findBestPath } from "../pathfinding/pathFinder.js"
 import { isTileSafeByTime } from "../pathfinding/safetyEvaluator.js"
@@ -352,6 +352,11 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
   console.log(`   🚨 Trying emergency moves...`)
 
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
+
+  // Check if current position is safe
+  const currentKey = posKey(player.x, player.y)
+  const currentPositionSafe = !unsafeTiles.has(currentKey)
+
   const moves = []
 
   // Calculate distance from bombs for each direction
@@ -370,12 +375,20 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
     })
     if (isBombTile) continue
 
-    // Calculate min distance to any bomb
+    // Calculate min distance to any bomb AND check if outside blast range
     let minDist = Infinity
+    let isOutsideAllBlastZones = true
+
     for (const bomb of bombs) {
       const { gridX, gridY } = getBombWithGrid(bomb)
       const distance = manhattanDistance(nx, ny, gridX, gridY)
       minDist = Math.min(minDist, distance)
+
+      // Check if this position is outside this bomb's blast range
+      const bombRange = getBombRange(bomb, bombers)
+      if (distance <= bombRange) {
+        isOutsideAllBlastZones = false
+      }
     }
 
     // Check if safe by timing
@@ -389,9 +402,15 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
       nx,
       ny,
       minDist,
+      isOutsideAllBlastZones,
       isSafeByTime,
       isCurrentlySafe,
-      score: (isSafeByTime ? 10000 : 0) + (isCurrentlySafe ? 5000 : 0) + minDist * 100,
+      // Score: Prioritize outside blast zones > safe by timing > currently safe > distance
+      score:
+        (isOutsideAllBlastZones ? 20000 : 0) +
+        (isSafeByTime ? 10000 : 0) +
+        (isCurrentlySafe ? 5000 : 0) +
+        minDist * 100,
     })
   }
 
@@ -407,12 +426,29 @@ function tryEmergencyMoves(player, map, bombs, bombers, currentSpeed) {
     return { action: "STAY", strategy: "emergency_stay" }
   }
 
-  // Sort by score
-  availableMoves.sort((a, b) => b.score - a.score)
-  const best = availableMoves[0]
+  // CRITICAL: Filter out moves that are NOT safe by timing
+  // Don't move into blast zones when bombs about to explode!
+  const safeMoves = availableMoves.filter((move) => move.isSafeByTime)
+
+  if (safeMoves.length === 0) {
+    // If current position is safe, STAY is better than moving to unsafe position!
+    if (currentPositionSafe) {
+      console.log(`   ✅ Current position SAFE - staying instead of moving to unsafe position`)
+      console.log(`🎯 ESCAPE: Stay (current position safer)`)
+      return { action: "STAY", strategy: "emergency_stay_safe_position" }
+    }
+
+    console.log(`   ❌ All emergency moves UNSAFE and current position also UNSAFE!`)
+    console.log(`🎯 ESCAPE: Stay (trapped - no good options)`)
+    return { action: "STAY", strategy: "emergency_stay_trapped" }
+  }
+
+  // Sort by score (prioritize outside blast zones + safe by timing + distance)
+  safeMoves.sort((a, b) => b.score - a.score)
+  const best = safeMoves[0]
 
   console.log(
-    `   ${best.isSafeByTime ? "✅" : "⚠️"} Emergency move: ${best.dir} (dist: ${best.minDist})`,
+    `   ✅ Emergency move: ${best.dir} (dist: ${best.minDist}, ${best.isOutsideAllBlastZones ? "✅ outside blast zones" : "⚠️ in blast zone but safe by timing"})`,
   )
   console.log(`🎯 ESCAPE: Emergency move`)
 

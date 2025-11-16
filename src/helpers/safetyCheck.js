@@ -36,10 +36,10 @@ export function checkNextPositionTimingSafe({
     console.log(`      Active bombs: ${bombs.length}`)
   }
 
-  // Calculate time based on ACTUAL speed (measured ~1.85x slower than theory)
-  // Theory: (40px / speed) * 17ms | Actual: ~1260ms @ speed 1 → 1260/680 = 1.85x
+  // Calculate time based on ACTUAL speed (measured ~1.20x slower than theory)
+  // Measured data: Speed 2: 407ms (theory 340ms) → 1.20x | Speed 3: 273ms (227ms) → 1.20x
   const timePerGridTheory = (GRID_SIZE / myBomber.speed) * STEP_DELAY
-  const timePerGrid = timePerGridTheory * 1.85 // ADJUSTED: Network/server/alignment delay
+  const timePerGrid = timePerGridTheory * 1.2 // ADJUSTED: Network/server/alignment delay (post queue optimization)
   const alignmentTime = 340 // Alignment overhead
   const timeToWalk = timePerGrid + alignmentTime
   const SAFETY_BUFFER = 1580 // Safety buffer in ms

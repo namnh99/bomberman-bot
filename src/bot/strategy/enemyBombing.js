@@ -5,12 +5,65 @@ import { willBombHitEnemy } from "./targetSelector.js"
 import {
   toBombGridCoords,
   isAdjacent,
+  isWithinBombRange,
   calculateFinalPosition,
   manhattanDistance,
+  isWalkable,
 } from "../../utils/gridUtils.js"
 import { findSafePath, findBestPath, findSafeTiles } from "../pathfinding/index.js"
 import { findTrapOpportunities } from "./trapDetector.js"
 import { decideAdvancedCombat } from "./advancedCombat.js"
+
+/**
+ * Find bombing positions within explosion range of enemy
+ * FLEXIBLE: Can bomb from distance, not just adjacent!
+ * @returns {Array} Array of bombing positions sorted by priority
+ */
+function findRangeBasedBombingPositions(enemy, player, map, bombs, range) {
+  const positions = []
+
+  // Check all 4 directions within bomb range
+  for (const [dx, dy, dir] of DIRS) {
+    // Check positions from 1 to range tiles away from enemy
+    for (let step = 1; step <= range; step++) {
+      const bx = enemy.x + dx * step
+      const by = enemy.y + dy * step
+
+      // Check if position is valid
+      if (!isWalkable(bx, by, map)) break
+
+      // Check if bomb already exists
+      const hasBomb = bombs.some((b) => {
+        const { gridX, gridY } = getBombWithGrid(b)
+        return gridX === bx && gridY === by
+      })
+
+      if (hasBomb) break
+
+      const distanceFromPlayer = manhattanDistance(player.x, player.y, bx, by)
+      const distanceFromEnemy = step
+
+      positions.push({
+        x: bx,
+        y: by,
+        direction: dir,
+        distanceFromPlayer,
+        distanceFromEnemy,
+        // Priority: closer to enemy = better (tighter trap)
+        priority: distanceFromEnemy * 10 + distanceFromPlayer * 0.1,
+      })
+
+      // Take first valid position in this direction
+      // (closest to enemy = best explosion zone coverage)
+      break
+    }
+  }
+
+  // Sort by priority (closer to enemy first, then closer to player)
+  positions.sort((a, b) => a.priority - b.priority)
+
+  return positions
+}
 
 /**
  * Validate bomb placement and escape path
@@ -22,9 +75,19 @@ import { decideAdvancedCombat } from "./advancedCombat.js"
  * @param {Array} bombers - All bombers
  * @param {Object} myBomber - Current bomber
  * @param {string} myUid - Player UID
+ * @param {boolean} aggressive - If true, allow risky timing-based escapes (for spam)
  * @returns {Object} { valid: boolean, reason: string, escapePath: Object, items: Array }
  */
-function validateBombAndEscape(bombPos, enemy, map, bombs, bombers, myBomber, myUid) {
+function validateBombAndEscape(
+  bombPos,
+  enemy,
+  map,
+  bombs,
+  bombers,
+  myBomber,
+  myUid,
+  aggressive = false,
+) {
   // Check if bomb would hit enemy
   const willHit = willBombHitEnemy(
     bombPos.x,
@@ -57,7 +120,18 @@ function validateBombAndEscape(bombPos, enemy, map, bombs, bombers, myBomber, my
     }
   }
 
-  const escapePath = findBestPath(map, bombPos, futureSafeTiles, futureBombs, bombers, myUid, true)
+  // SPAM MODE: Allow aggressive timing-based crossing for high-risk plays
+  // NORMAL MODE: Conservative - avoid timing-based risks
+  const escapePath = findBestPath(
+    map,
+    bombPos,
+    futureSafeTiles,
+    futureBombs,
+    bombers,
+    myUid,
+    true, // isEscaping
+    aggressive, // allowTimingCrossing - true for spam, false for normal
+  )
 
   if (!escapePath || escapePath.path.length === 0) {
     return {
@@ -235,6 +309,7 @@ export function decideEnemyBombing({
 
             // CRITICAL: Must validate escape path even for spam bombing!
             // Bot cannot spam continuously - must escape after each bomb
+            // SPAM MODE: Use aggressive validation (allow risky timing-based escapes)
             const validation = validateBombAndEscape(
               position,
               enemy,
@@ -243,6 +318,7 @@ export function decideEnemyBombing({
               bombers,
               myBomber,
               myUid,
+              true, // aggressive = true for spam bombing
             )
 
             if (!validation.valid) {
@@ -333,30 +409,34 @@ export function decideEnemyBombing({
   // PRIORITY PURSUIT MODE: Aggressively pursue enemies within range
   if (mode === "priority_pursuit") {
     for (const enemy of enemies) {
-      const distance = manhattanDistance(enemy.x, enemy.y, player.x, player.y)
+      const distanceToEnemy = manhattanDistance(enemy.x, enemy.y, player.x, player.y)
 
-      if (distance > maxDistance) continue
+      if (distanceToEnemy > maxDistance) continue
 
-      console.log(`   🎯 Pursuing enemy at [${enemy.x},${enemy.y}] (distance: ${distance})`)
+      console.log(`   🎯 Pursuing enemy at [${enemy.x},${enemy.y}] (distance: ${distanceToEnemy})`)
 
-      const adjacentTargets = []
-      for (const [adx, ady] of DIRS) {
-        const tx = enemy.x + adx
-        const ty = enemy.y + ady
-        if (map[ty] && WALKABLE.includes(map[ty][tx])) {
-          const hasBomb = bombs.some((b) => {
-            const { gridX, gridY } = getBombWithGrid(b)
-            return gridX === tx && gridY === ty
-          })
-          if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
-        }
-      }
+      // Use range-based positions (not just adjacent) for flexible bombing
+      const rangeBombingPositions = findRangeBasedBombingPositions(
+        enemy,
+        player,
+        map,
+        bombs,
+        myBomber.explosionRange,
+      )
 
-      // CRITICAL: Check if ALREADY at adjacent position (path = 0 steps)
-      const alreadyAdjacent = isAdjacent(enemy.x, enemy.y, player.x, player.y)
+      // CRITICAL: Check if ALREADY within bomb range (flexible - 1-range tiles)
+      const withinRange = isWithinBombRange(
+        player.x,
+        player.y,
+        enemy.x,
+        enemy.y,
+        myBomber.explosionRange,
+      )
 
-      if (alreadyAdjacent) {
-        console.log(`   💣 ALREADY adjacent to enemy! Attempting to bomb...`)
+      if (withinRange) {
+        console.log(
+          `   💣 ALREADY within bomb range (${distanceToEnemy} tiles)! Attempting to bomb...`,
+        )
 
         const validation = validateBombAndEscape(
           player,
@@ -369,8 +449,10 @@ export function decideEnemyBombing({
         )
 
         if (validation.valid) {
-          console.log(`   ✅ PRIORITY PURSUIT: Bombing adjacent enemy NOW!`)
-          console.log(`🎯 DECISION: BOMB ENEMY (Adjacent Attack)`)
+          console.log(
+            `   ✅ PRIORITY PURSUIT: Bombing enemy at ${distanceToEnemy} tiles distance NOW!`,
+          )
+          console.log(`🎯 DECISION: BOMB ENEMY (Range Attack - ${distanceToEnemy} tiles)`)
           console.log("=".repeat(90) + "\n")
           trackDecision(player, "BOMB")
 
@@ -384,9 +466,12 @@ export function decideEnemyBombing({
         } else {
           console.log(`   ❌ Cannot bomb: ${validation.reason}`)
         }
-      } else if (adjacentTargets.length > 0) {
-        // Not adjacent yet - need to move
-        const pathToEnemy = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
+      } else if (rangeBombingPositions.length > 0) {
+        // Not within range yet - path to range-based bombing positions
+        console.log(
+          `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
+        )
+        const pathToEnemy = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
 
         if (pathToEnemy && pathToEnemy.path.length > 0) {
           const finalPos = calculateFinalPosition(player, pathToEnemy.path)
@@ -403,10 +488,10 @@ export function decideEnemyBombing({
 
           if (validation.valid) {
             console.log(
-              `   ✅ PRIORITY PURSUIT: Path to enemy found (${pathToEnemy.path.length} steps)`,
+              `   ✅ PRIORITY PURSUIT: Path to range bombing position found (${pathToEnemy.path.length} steps)`,
             )
-            console.log(`      Can bomb and escape after reaching enemy`)
-            console.log(`🎯 DECISION: PURSUE ENEMY (Priority)`)
+            console.log(`      Can bomb and escape after reaching position`)
+            console.log(`🎯 DECISION: PURSUE ENEMY (Priority - Range Based)`)
             console.log("=".repeat(90) + "\n")
             trackDecision(player, pathToEnemy.path[0])
 
@@ -425,12 +510,23 @@ export function decideEnemyBombing({
     return null
   }
 
-  // DEFENSE MODE: Bomb adjacent enemies (self-defense)
+  // DEFENSE MODE: Bomb nearby enemies (self-defense)
   if (mode === "defense") {
     for (const enemy of enemies) {
-      if (!isAdjacent(enemy.x, enemy.y, player.x, player.y)) continue
+      // NEW: More flexible - bomb if enemy within range (1-2 tiles)
+      const inRange = isWithinBombRange(
+        player.x,
+        player.y,
+        enemy.x,
+        enemy.y,
+        myBomber.explosionRange,
+      )
+      if (!inRange) continue
 
-      console.log(`   ⚔️ Enemy adjacent at [${enemy.x},${enemy.y}] - DEFENSE MODE!`)
+      const distance = manhattanDistance(player.x, player.y, enemy.x, enemy.y)
+      console.log(
+        `   ⚔️ Enemy within bomb range at [${enemy.x},${enemy.y}] (${distance} tiles) - DEFENSE MODE!`,
+      )
 
       if (!canPlaceBomb(myBomber, bombs, myUid)) {
         console.log("   ⚠️ No bombs available for defense (all bombs already placed)")
@@ -477,35 +573,39 @@ export function decideEnemyBombing({
     console.log(`   🎯 FIGHT mode - actively pursuing enemies`)
 
     for (const enemy of enemies) {
-      const adjacentTargets = []
-      for (const [adx, ady] of DIRS) {
-        const tx = enemy.x + adx
-        const ty = enemy.y + ady
-        if (map[ty] && WALKABLE.includes(map[ty][tx])) {
-          const hasBomb = bombs.some((b) => {
-            const { gridX, gridY } = getBombWithGrid(b)
-            return gridX === tx && gridY === ty
-          })
-          if (!hasBomb) adjacentTargets.push({ x: tx, y: ty })
-        }
+      // Use range-based positions (not just adjacent) for flexible bombing
+      const rangeBombingPositions = findRangeBasedBombingPositions(
+        enemy,
+        player,
+        map,
+        bombs,
+        myBomber.explosionRange,
+      )
+
+      if (rangeBombingPositions.length === 0) {
+        console.log(
+          `   ℹ️ No valid range-based bombing positions for enemy at [${enemy.x},${enemy.y}]`,
+        )
+        continue
       }
 
-      if (adjacentTargets.length === 0) continue
-
-      const pathToAdj = findSafePath(map, player, adjacentTargets, bombs, bombers, myUid)
-      if (!pathToAdj || pathToAdj.path.length === 0) continue
+      console.log(
+        `   📍 Found ${rangeBombingPositions.length} range-based bombing positions (1-${myBomber.explosionRange} tiles)`,
+      )
+      const pathToPosition = findSafePath(map, player, rangeBombingPositions, bombs, bombers, myUid)
+      if (!pathToPosition || pathToPosition.path.length === 0) continue
 
       if (!canPlaceBomb(myBomber, bombs, myUid)) {
         console.log("   ⚠️ No bombs available (all bombs already placed), chasing enemy")
-        trackDecision(player, pathToAdj.path[0])
+        trackDecision(player, pathToPosition.path[0])
         // CRITICAL: No fullPath when chasing - enemy can move
-        return createDecision(pathToAdj.path[0], {
+        return createDecision(pathToPosition.path[0], {
           // NO fullPath - recalculate each tick
           mode: "pursuit",
         })
       }
 
-      const finalPos = calculateFinalPosition(player, pathToAdj.path)
+      const finalPos = calculateFinalPosition(player, pathToPosition.path)
 
       const validation = validateBombAndEscape(
         finalPos,
@@ -518,12 +618,12 @@ export function decideEnemyBombing({
       )
 
       if (validation.valid) {
-        console.log(`   ✅ Plan: move to enemy-adjacent tile and BOMB+ESCAPE`)
-        console.log("   🎯 DECISION: MOVE (towards enemy)")
-        trackDecision(player, pathToAdj.path[0])
+        console.log(`   ✅ Plan: move to range bombing position and BOMB+ESCAPE`)
+        console.log("   🎯 DECISION: MOVE (towards enemy - range based)")
+        trackDecision(player, pathToPosition.path[0])
 
         // CRITICAL: No fullPath when chasing - enemy can move
-        return createDecision(pathToAdj.path[0], {
+        return createDecision(pathToPosition.path[0], {
           // NO fullPath - recalculate each tick
           mode: "pursuit",
         })

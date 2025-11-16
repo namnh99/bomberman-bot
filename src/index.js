@@ -24,7 +24,6 @@ const gameContext = {
   moveIntervalId: null,
   alignIntervalId: null,
   currentMove: null, // Track current movement context
-  waitingForBombPlacement: false, // Track if waiting for bomb confirmation
   forceClearIntervals: () => {
     if (gameContext.moveIntervalId) {
       clearInterval(gameContext.moveIntervalId)
@@ -176,8 +175,13 @@ async function smoothMove(direction) {
     direction,
     targetGrid: { x: nextGridX, y: nextGridY },
     targetPixel: { x: targetPixelX, y: targetPixelY },
-    startTime: movementStartTime,
+    startTime: movementStartTime, // Total time (includes alignment)
+    moveStartTime: Date.now(), // Pure movement time (after alignment)
     startGrid: movementStartGrid,
+    startPixel: { x: myBomberAfterAlign.x, y: myBomberAfterAlign.y }, // Track starting pixel position (after alignment)
+    lastPixel: { x: myBomberAfterAlign.x, y: myBomberAfterAlign.y }, // Track last known position
+    lastMoveTime: Date.now(), // Track last time bot actually moved
+    stuckCheckCount: 0, // Count consecutive stuck checks
     isEscaping: pathModeManager.isEscaping(),
     isFollowing: pathModeManager.isFollowing(),
   }
@@ -193,6 +197,52 @@ async function smoothMove(direction) {
 
     const currentPixelX = currentBomber.x
     const currentPixelY = currentBomber.y
+
+    // STUCK DETECTION: Check if bot is actually moving
+    if (gameContext.currentMove) {
+      const pixelsMoved =
+        Math.abs(currentPixelX - gameContext.currentMove.lastPixel.x) +
+        Math.abs(currentPixelY - gameContext.currentMove.lastPixel.y)
+
+      const now = Date.now()
+      const timeSinceLastMove = now - gameContext.currentMove.lastMoveTime
+
+      if (pixelsMoved > 0) {
+        // Bot moved - reset stuck detection
+        gameContext.currentMove.lastPixel = { x: currentPixelX, y: currentPixelY }
+        gameContext.currentMove.lastMoveTime = now
+        gameContext.currentMove.stuckCheckCount = 0
+      } else if (timeSinceLastMove > 200) {
+        // Bot hasn't moved in 200ms - potentially stuck
+        gameContext.currentMove.stuckCheckCount++
+
+        if (gameContext.currentMove.stuckCheckCount >= 5) {
+          // Stuck for 5 consecutive checks (~1 second) - abort move
+          console.log(`⚠️ STUCK DETECTED: Bot hasn't moved in ${timeSinceLastMove}ms`)
+          console.log(
+            `   Position: [${Math.floor(currentPixelX / GRID_SIZE)}, ${Math.floor(currentPixelY / GRID_SIZE)}]`,
+          )
+          console.log(
+            `   Target: [${gameContext.currentMove.targetGrid.x}, ${gameContext.currentMove.targetGrid.y}]`,
+          )
+
+          clearInterval(gameContext.moveIntervalId)
+          gameContext.moveIntervalId = null
+
+          // Abort paths and re-evaluate
+          if (pathModeManager.isEscaping()) {
+            pathModeManager.abortEscape("Movement stuck")
+          }
+          if (pathModeManager.isFollowing()) {
+            pathModeManager.abortFollow("Movement stuck")
+          }
+
+          gameContext.currentMove = null
+          makeDecision()
+          return
+        }
+      }
+    }
 
     // Check if reached target
     const distanceToTarget =
@@ -217,35 +267,43 @@ async function smoothMove(direction) {
 function handleMoveComplete() {
   if (!gameContext.currentMove) return
 
-  const { direction, startTime, startGrid } = gameContext.currentMove
+  const { direction, startTime, moveStartTime, startGrid, startPixel } = gameContext.currentMove
 
-  // Calculate actual movement time
-  // const actualMoveTime = Date.now() - startTime
-  // const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
-  // if (myBomber && startGrid) {
-  //   // Calculate PIXEL distance moved
-  //   const pixelsMoved = Math.abs(myBomber.x - startGrid.x) + Math.abs(myBomber.y - startGrid.y)
+  // Calculate timing metrics
+  const totalTime = Date.now() - startTime // Total time (includes alignment)
+  const pureMoveTime = Date.now() - moveStartTime // Pure movement time (after alignment)
+  const alignmentTime = totalTime - pureMoveTime // Time spent in alignment
 
-  //   // Calculate GRID distance moved (1 grid = 40px)
-  //   const gridsMoved = Math.round(pixelsMoved / GRID_SIZE)
+  const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+  if (myBomber && startPixel) {
+    // Calculate PIXEL distance moved (use startPixel instead of startGrid for accuracy)
+    const pixelsMoved = Math.abs(myBomber.x - startPixel.x) + Math.abs(myBomber.y - startPixel.y)
 
-  //   if (gridsMoved > 0) {
-  //     const msPerGridActual = actualMoveTime / gridsMoved
-  //     const msPerGridTheoretical = (GRID_SIZE / myBomber.speed) * STEP_DELAY // (40/speed) * 17ms
-  //     const difference = msPerGridActual - msPerGridTheoretical
-  //     const percentDiff = ((difference / msPerGridTheoretical) * 100).toFixed(0)
+    // Calculate GRID distance moved (1 grid = 40px)
+    const gridsMoved = Math.round(pixelsMoved / GRID_SIZE)
 
-  //     console.log(`📊 TIMING: Moved ${pixelsMoved}px (${gridsMoved} grids) in ${actualMoveTime}ms`)
-  //     console.log(
-  //       `   Actual: ${msPerGridActual.toFixed(0)}ms/grid | Theory: ${msPerGridTheoretical.toFixed(0)}ms/grid @ speed ${myBomber.speed}`,
-  //     )
-  //     console.log(
-  //       `   Difference: ${difference > 0 ? "+" : ""}${difference.toFixed(0)}ms (${percentDiff > 0 ? "+" : ""}${percentDiff}%)`,
-  //     )
-  //   }
-  // }
+    if (gridsMoved > 0) {
+      const msPerGridActual = pureMoveTime / gridsMoved // Use pure move time (no alignment)
+      const msPerGridTheoretical = (GRID_SIZE / myBomber.speed) * STEP_DELAY // (40/speed) * 17ms
+      const difference = msPerGridActual - msPerGridTheoretical
+      const percentDiff = ((difference / msPerGridTheoretical) * 100).toFixed(0)
 
-  // console.log(`✅ Move complete: ${direction}`)
+      console.log(`📊 TIMING: Moved ${pixelsMoved}px (${gridsMoved} grids)`)
+      console.log(`   Total: ${totalTime}ms (move: ${pureMoveTime}ms, align: ${alignmentTime}ms)`)
+      console.log(
+        `   Speed: ${msPerGridActual.toFixed(0)}ms/grid | Theory: ${msPerGridTheoretical.toFixed(0)}ms/grid @ speed ${myBomber.speed}`,
+      )
+      console.log(
+        `   Difference: ${difference > 0 ? "+" : ""}${difference.toFixed(0)}ms (${percentDiff > 0 ? "+" : ""}${percentDiff}%)`,
+      )
+
+      // Track stats for adjustment if needed
+      if (Math.abs(percentDiff) > 50) {
+        console.log(`   ⚠️ Large timing deviation detected - may need adjustment`)
+      }
+    }
+  }
+  console.log(`✅ Move complete: ${direction}`)
   gameContext.currentMove = null
 
   // Priority 1: Continue escape mode
@@ -432,52 +490,8 @@ function makeDecision() {
     if (action === "BOMB") {
       placeBomb()
 
-      // CRITICAL: Set flag to prevent re-evaluation during bomb placement wait
-      gameContext.waitingForBombPlacement = true
-
-      // CRITICAL: Wait for server to confirm bomb placement before escaping
-      // Otherwise bot might move before bomb is placed, causing deadlock
-      let escapeExecuted = false
-
-      const bombPlacementTimeout = setTimeout(() => {
-        if (!escapeExecuted) {
-          console.log("⚠️  Bomb placement timeout - proceeding with escape anyway")
-          escapeExecuted = true
-          gameContext.waitingForBombPlacement = false
-          executeEscapeAfterBomb(
-            pathModeManager,
-            escapeAction,
-            isEscape,
-            fullPath,
-            fullPathCoordinates,
-          )
-        }
-      }, 100) // Max 100ms wait for server confirmation
-
-      // Set up one-time listener for bomb confirmation
-      const bombConfirmHandler = (bomb) => {
-        // Only proceed if this is OUR bomb and we haven't escaped yet
-        if (bomb.uid === gameContext.myUid && !escapeExecuted) {
-          clearTimeout(bombPlacementTimeout)
-          const { x: gridX, y: gridY } = toGridCoords(bomb.x, bomb.y)
-          console.log(
-            `✅ Bomb confirmed at grid [${gridX}, ${gridY}], pixel [${bomb.x}, ${bomb.y}] position - proceeding with escape`,
-          )
-          escapeExecuted = true
-          gameContext.waitingForBombPlacement = false
-          executeEscapeAfterBomb(
-            pathModeManager,
-            escapeAction,
-            isEscape,
-            fullPath,
-            fullPathCoordinates,
-          )
-        }
-      }
-
-      // Use once() to auto-remove listener after first trigger
-      socket.once("new_bomb", bombConfirmHandler)
-
+      // Execute escape immediately after placing bomb
+      executeEscapeAfterBomb(pathModeManager, escapeAction, isEscape, fullPath, fullPathCoordinates)
       return
     }
 

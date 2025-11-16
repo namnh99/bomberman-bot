@@ -764,6 +764,8 @@ export function decideNextAction(state, myUid) {
             console.log(`   💣 CONTINUE SPAM! Bombing at [${nextPos.x},${nextPos.y}]`)
 
             // Validate escape path
+            // SPAM BOMBING: Use aggressive escape (allowTimingCrossing = true)
+            // Spam is high-risk strategy - need to take calculated risks!
             const futureBombs = [
               ...bombs,
               createFutureBomb(nextPos.x, nextPos.y, myBomber.explosionRange, myBomber.uid),
@@ -776,7 +778,8 @@ export function decideNextAction(state, myUid) {
               futureBombs,
               bombers,
               myUid,
-              true,
+              true, // isEscaping
+              true, // allowTimingCrossing - AGGRESSIVE for spam!
             )
 
             if (escapePath && escapePath.path.length > 0) {
@@ -905,9 +908,18 @@ export function decideNextAction(state, myUid) {
   }
 
   // PHASE 2: Dynamic Item Prioritization
+  // EARLY game with many chests: Only collect NEARBY items (≤5 steps), skip far items
+  // MID/LATE game: Collect all accessible items
   console.log(`\n🔍 PHASE 2: Dynamic Item Prioritization`)
   const items = findAllItems(map, bombs, bombers, false)
   console.log(`   Items found: ${items.length}`)
+
+  const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
+  if (isEarlyWithManyChests) {
+    console.log(`   📦 EARLY GAME: Will prioritize nearby items only (skip far items for chests)`)
+  }
+
+  let itemResult = null // Initialize outside block
 
   // CRITICAL: Classify items by danger level instead of filtering completely
   const unsafeTiles = findUnsafeTiles(map, bombs, bombers)
@@ -986,11 +998,11 @@ export function decideNextAction(state, myUid) {
       // CRITICAL: Scale value based on timing safety margin
       if (item.isInBlastZone && item.timeUntilDanger < Infinity) {
         const distance = Math.abs(item.x - player.x) + Math.abs(item.y - player.y)
-        // ADJUSTED: Use actual measured timing (actual ~1.85x slower than theory)
+        // ADJUSTED: Use actual measured timing (actual ~1.20x slower than theory)
         // Theory: (40px/speed) * 17ms = 680ms @ speed 1
-        // Measured: Speed 1 = ~1260ms/grid → multiply by 1.85x (1260/680)
+        // Measured: Speed 1: 789ms → 1.16x | Speed 2: 407ms → 1.20x | Speed 3: 273ms → 1.20x (avg: 1.20x)
         const msPerGridTheory = (40 / myBomber.speed) * 17 // Using GRID_SIZE=40, STEP_DELAY=17
-        const msPerGridActual = msPerGridTheory * 1.85 // Account for network/server/alignment delay
+        const msPerGridActual = msPerGridTheory * 1.2 // Account for network/server/alignment delay (post queue optimization)
         const moveTime = distance * msPerGridActual
         const safetyBuffer = 400 // ms buffer (reduced since moveTime already adjusted)
         const requiredTime = moveTime + safetyBuffer
@@ -1030,10 +1042,28 @@ export function decideNextAction(state, myUid) {
   }
 
   // Try multi-target path for items
-  let itemResult = null
   if (prioritizedItems.length > 0) {
-    const topItems = prioritizedItems.slice(0, 5).map((pi) => pi.item)
-    const multiStrategy = compareSingleVsMultiTarget(player, topItems, map, bombs, bombers, myUid)
+    let topItems = prioritizedItems.slice(0, 5).map((pi) => pi.item)
+
+    // EARLY game with many chests: Filter out far items (>5 steps)
+    if (isEarlyWithManyChests) {
+      const nearbyItems = topItems.filter((item) => {
+        const distance = Math.abs(item.x - player.x) + Math.abs(item.y - player.y)
+        return distance <= 5
+      })
+
+      if (nearbyItems.length < topItems.length) {
+        console.log(
+          `   🔍 EARLY: Filtered ${topItems.length - nearbyItems.length} far items (keeping ${nearbyItems.length} nearby)`,
+        )
+        topItems = nearbyItems
+      }
+    }
+
+    const multiStrategy =
+      topItems.length > 0
+        ? compareSingleVsMultiTarget(player, topItems, map, bombs, bombers, myUid)
+        : null
 
     if (multiStrategy) {
       if (multiStrategy.strategy === "multi") {
@@ -1441,7 +1471,7 @@ export function decideNextAction(state, myUid) {
 
     if (otherSafeTiles.length > 0) {
       console.log(`   🛡️  Finding safe path to exploration tiles...`)
-      let explorePath = findSafePath(map, player, otherSafeTiles, bombs, bombers, myUid)
+      let explorePath = findSafePath(map, player, otherSafeTiles, bombs, bombers, myUid, enemies)
 
       // If the best exploration path is only a single step, try to find a longer path
       // to reduce immediate oscillation between two tiles (ping-pong).

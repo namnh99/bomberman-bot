@@ -72,7 +72,7 @@ export function alignToGrid(direction, target, gameContext) {
       // STUCK DETECTION for alignment
       const maxAlignTime = alignSteps * STEP_DELAY * 3 // Allow 3x expected time
       const alignStartTime = Date.now()
-      let lastCheckPos = { x: myBomber.x, y: myBomber.y }
+      let lastCheckPos = { x: myBomber.x, y: myBomber.y } // Track last position for stuck detection
 
       // CRITICAL: Send alignment commands continuously (server requires this)
       // Queue will handle rate limiting and deduplication
