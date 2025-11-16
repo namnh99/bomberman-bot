@@ -41,9 +41,9 @@ export function registerSocketHandlers(
   // Game start handler - wait for this before making any decisions
   socket.on("start", (data) => {
     // Make initial decision when game starts
-    // if (gameContext.currentState && !manualControlManager.isManualMode()) {
-    //   onMakeDecision()
-    // }
+    if (gameContext.currentState && !manualControlManager.isManualMode()) {
+      onMakeDecision()
+    }
   })
 
   // User state update handler
@@ -189,12 +189,10 @@ function handleNewBombDuringPath(
 ) {
   // Check escape path first (highest priority)
   if (pathModeManager.isEscaping() && pathModeManager.getRemainingEscapeSteps() > 0) {
-
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     if (myBomber) {
       const escapePath = pathModeManager.escapePath
       const escapeCoordinates = pathModeManager.getEscapeCoordinates()
-
 
       // Validate timing for entire escape path
       const isSafe = isPathSafeByTime(
@@ -218,7 +216,6 @@ function handleNewBombDuringPath(
   else if (pathModeManager.isFollowing() && pathModeManager.getRemainingFollowSteps() > 0) {
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     if (myBomber) {
-
       const followPath = pathModeManager.followPath
       const followCoordinates = pathModeManager.getFollowCoordinates()
 
