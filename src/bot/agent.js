@@ -6,7 +6,14 @@ import {
   ITEM_PRIORITY_BIAS,
   OSCILLATION_THRESHOLD,
 } from "../utils/constants.js"
-import { posKey, isAdjacent, inBounds, toGridCoords, toBombGridCoords } from "../utils/gridUtils.js"
+import {
+  posKey,
+  isAdjacent,
+  inBounds,
+  toGridCoords,
+  toBombGridCoords,
+  manhattanDistance,
+} from "../utils/gridUtils.js"
 import { getBombWithGrid, getTimeUntilExplosion } from "../utils/bombUtils.js"
 import { canPlaceBomb, getRemainingBombs } from "../utils/bomberUtils.js"
 import { findBestPath, findSafePath, findShortestEscapePath } from "./pathfinding/index.js"
@@ -40,9 +47,10 @@ let lastEscapeTime = 0
 const ESCAPE_COOLDOWN_MS = 5000 // Don't return to escaped position for 5 seconds
 
 // Spam bombing: Track ongoing spam sequence
-let activeSpamSequence = null // { positions: [], target: {x, y}, strategy: string, currentIndex: 0 }
+let activeSpamSequence = null // { positions: [], target: {x, y}, targetEnemy: {id, x, y}, strategy: string, currentIndex: 0 }
 let lastSpamBombTime = 0
-const SPAM_BOMB_COOLDOWN_MS = 500 // Minimum 500ms between spam bombs (safety buffer)
+const SPAM_BOMB_COOLDOWN_MS = 300 // Minimum 300ms between spam bombs (safety buffer)
+const SPAM_TARGET_MAX_DISTANCE = 5 // Cancel spam if enemy moves >5 tiles away
 
 // Track recently visited positions to prevent ping-pong between adjacent tiles
 let recentPositions = [] // Array of {x, y, time}
@@ -704,8 +712,43 @@ export function decideNextAction(state, myUid) {
     console.log(`   Time since last bomb: ${timeSinceLastBomb}ms`)
     console.log(`   Remaining bombs: ${getRemainingBombs(myBomber, bombs, myUid)}`)
 
+    // Check if target enemy still exists and hasn't moved too far
+    if (activeSpamSequence.targetEnemy) {
+      const currentEnemy = enemies.find((e) => e.id === activeSpamSequence.targetEnemy.id)
+
+      if (!currentEnemy) {
+        console.log(`   ❌ Target enemy (ID: ${activeSpamSequence.targetEnemy.id}) is dead/gone`)
+        console.log(`   🚫 CANCELLING spam sequence`)
+        activeSpamSequence = null
+        // Continue to next phase
+      } else {
+        // Check if enemy moved too far from original position
+        const enemyMovedDistance = manhattanDistance(
+          currentEnemy.x,
+          currentEnemy.y,
+          activeSpamSequence.targetEnemy.x,
+          activeSpamSequence.targetEnemy.y,
+        )
+
+        if (enemyMovedDistance > SPAM_TARGET_MAX_DISTANCE) {
+          console.log(
+            `   ❌ Target enemy moved ${enemyMovedDistance} tiles away from spam zone (max: ${SPAM_TARGET_MAX_DISTANCE})`,
+          )
+          console.log(
+            `      Original: [${activeSpamSequence.targetEnemy.x},${activeSpamSequence.targetEnemy.y}]`,
+          )
+          console.log(`      Current:  [${currentEnemy.x},${currentEnemy.y}]`)
+          console.log(`   🚫 CANCELLING spam sequence - target escaped`)
+          activeSpamSequence = null
+          // Continue to next phase
+        } else {
+          console.log(`   ✅ Target enemy still in range (moved ${enemyMovedDistance} tiles)`)
+        }
+      }
+    }
+
     // Check if spam sequence is still valid
-    if (timeSinceLastBomb >= SPAM_BOMB_COOLDOWN_MS) {
+    if (activeSpamSequence && timeSinceLastBomb >= SPAM_BOMB_COOLDOWN_MS) {
       const nextIndex = activeSpamSequence.currentIndex + 1
 
       if (nextIndex < activeSpamSequence.positions.length) {
@@ -817,10 +860,20 @@ export function decideNextAction(state, myUid) {
         console.log(
           `      Target: [${advancedCombatResult.spamTarget.x},${advancedCombatResult.spamTarget.y}]`,
         )
+        console.log(`      Target Enemy ID: ${advancedCombatResult.targetEnemy?.id || "unknown"}`)
+
+        // Find the target enemy object to lock onto
+        const targetEnemy = enemies.find(
+          (e) =>
+            e.x === advancedCombatResult.spamTarget.x && e.y === advancedCombatResult.spamTarget.y,
+        )
 
         activeSpamSequence = {
           positions: advancedCombatResult.spamSequence,
           target: advancedCombatResult.spamTarget,
+          targetEnemy: targetEnemy
+            ? { id: targetEnemy.id, x: targetEnemy.x, y: targetEnemy.y }
+            : null,
           strategy: advancedCombatResult.mode.replace("spam_", ""),
           currentIndex: 0, // Start at first position
         }

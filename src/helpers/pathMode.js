@@ -9,6 +9,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null // Track target {x, y, type: 'item'|'chest'|'enemy'}
   }
 
   // Escape Mode Methods
@@ -69,6 +70,12 @@ export class PathModeManager {
     if (coordinates.length > 0) {
       const coordStr = coordinates.map((c) => `[${c.x},${c.y}]`).join(" → ")
       console.log(`   Waypoints: ${coordStr}`)
+      // Path target is the final destination
+      const destination = coordinates[coordinates.length - 1]
+      this.pathTarget = { x: destination.x, y: destination.y }
+      console.log(`   Target destination: [${this.pathTarget.x},${this.pathTarget.y}]`)
+    } else {
+      this.pathTarget = null
     }
     this.followMode = true
     this.followPath = [...path]
@@ -93,6 +100,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   completeFollow() {
@@ -100,6 +108,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   // General Methods
@@ -114,6 +123,7 @@ export class PathModeManager {
     this.followMode = false
     this.followPath = []
     this.followCoordinates = []
+    this.pathTarget = null
   }
 
   getStatus() {

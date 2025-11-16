@@ -285,6 +285,39 @@ function handleNewBombDuringPath(
         console.log(`   ✅ Entire follow path is safe, continuing...`)
       }
     }
+  }
+  // Check if target destination is threatened by new bomb
+  else if (pathModeManager.isFollowing() && pathModeManager.pathTarget) {
+    const target = pathModeManager.pathTarget
+    const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
+
+    if (myBomber) {
+      // Check what's at the target position
+      const map = gameContext.currentState.map
+      const targetTile = map[target.y]?.[target.x]
+
+      // Check if target is in blast zone of any bomb
+      const unsafeTiles = findUnsafeTiles(
+        gameContext.currentState.map,
+        gameContext.currentState.bombs,
+        gameContext.currentState.bombers,
+      )
+
+      const targetKey = `${target.x},${target.y}`
+      const isTargetThreatened = unsafeTiles.has(targetKey)
+
+      if (isTargetThreatened) {
+        console.log(
+          `   💥 DESTINATION THREATENED! "${targetTile}" at [${target.x},${target.y}] is in blast zone`,
+        )
+        console.log(`   🚫 ABORT PATH: Destination will be destroyed/unsafe`)
+        pathModeManager.abortFollow(`Destination "${targetTile}" threatened by bomb`)
+        gameContext.forceClearIntervals()
+        onMakeDecision()
+      } else {
+        console.log(`   ✅ Destination is safe from blast, continuing path...`)
+      }
+    }
   } else if (
     !manualControlManager.isManualMode() &&
     !pathModeManager.isEscaping() &&
@@ -319,10 +352,10 @@ function handleBombExplodeDuringPath(
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    console.log("💥 Bomb exploded, re-evaluating...")
+    // console.log("💥 Bomb exploded, re-evaluating...")
     onMakeDecision()
   } else {
-    console.log("💥 Bomb exploded - path continues (safety checked on new_bomb events)")
+    // console.log("💥 Bomb exploded - path continues (safety checked on new_bomb events)")
   }
 }
 
@@ -348,9 +381,9 @@ function handleChestDestroyedDuringPath(
     !gameContext.moveIntervalId &&
     !gameContext.alignIntervalId
   ) {
-    console.log("🧱 Chest destroyed, re-evaluating...")
+    // console.log("🧱 Chest destroyed, re-evaluating...")
     onMakeDecision()
   } else {
-    console.log("🧱 Chest destroyed - path continues (safety checked on new_bomb events)")
+    // console.log("🧱 Chest destroyed - path continues (safety checked on new_bomb events)")
   }
 }

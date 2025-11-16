@@ -90,6 +90,7 @@ function createDecision(action, options = {}) {
     mode: options.mode || null,
     spamSequence: options.spamSequence || null, // Track ongoing spam sequence
     spamTarget: options.spamTarget || null, // Track spam target enemy position
+    targetEnemy: options.targetEnemy || null, // Track target enemy object for locking
   }
 }
 
@@ -266,6 +267,7 @@ export function decideEnemyBombing({
               mode: `spam_${spamPlan.strategy}`,
               spamSequence: spamPlan.positions, // Track spam sequence for continuation
               spamTarget: { x: enemy.x, y: enemy.y }, // Track enemy position for spam continuation
+              targetEnemy: enemy, // Lock onto this specific enemy
             })
           }
 
