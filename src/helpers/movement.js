@@ -1,13 +1,32 @@
 import { offset } from "../index.js"
 import { STEP_DELAY, GRID_SIZE } from "../utils/constants.js"
-import { moveQueue } from "./moveQueue.js"
 import { getBomber } from "./gameState.js"
 
+// Simple throttling to prevent spam
+let lastMoveTime = 0
+let lastDirection = null
+const MIN_MOVE_INTERVAL = STEP_DELAY // Match server tick rate (17ms)
+
 /**
- * Send a single move command to the server (via queue)
+ * Send a single move command to the server (direct emit with minimal throttling)
  */
-export function sendMoveCommand(direction, priority = "normal") {
-  moveQueue.enqueue(direction, priority)
+export function sendMoveCommand(direction, socket) {
+  if (!socket) {
+    console.log("⚠️  No socket available for sendMoveCommand")
+    return
+  }
+
+  const now = Date.now()
+  const timeSinceLastMove = now - lastMoveTime
+
+  // Throttle all moves to match server tick rate
+  if (timeSinceLastMove < MIN_MOVE_INTERVAL) {
+    return
+  }
+
+  socket.emit("move", { orient: direction })
+  lastMoveTime = now
+  lastDirection = direction
 }
 
 /**
@@ -109,8 +128,10 @@ export function alignToGrid(direction, target, gameContext) {
           return resolve()
         }
 
-        // Send alignment command continuously (queue will deduplicate)
-        moveQueue.enqueue(alignDirection, "high")
+        // Send alignment command continuously
+        if (gameContext.socket) {
+          gameContext.socket.emit("move", { orient: alignDirection })
+        }
         lastCheckPos = { x: currentBomber.x, y: currentBomber.y }
       }, STEP_DELAY)
     } else {

@@ -11,7 +11,6 @@ import { PathModeManager } from "./helpers/pathMode.js"
 import { ManualControlManager, setupManualControl } from "./helpers/manualControl.js"
 import { registerSocketHandlers } from "./handlers/socketHandlers.js"
 import { checkNextPositionTimingSafe } from "./helpers/safetyCheck.js"
-import { moveQueue } from "./helpers/moveQueue.js"
 
 // ==================== INITIALIZATION ====================
 export const offset = (GRID_SIZE - 35) / 2
@@ -21,6 +20,7 @@ const socket = socketManager.getSocket()
 const gameContext = {
   currentState: null,
   myUid: null,
+  socket: socket, // Add socket to context for direct emit
   moveIntervalId: null,
   alignIntervalId: null,
   currentMove: null, // Track current movement context
@@ -33,8 +33,6 @@ const gameContext = {
       clearInterval(gameContext.alignIntervalId)
       gameContext.alignIntervalId = null
     }
-    // Abort pending moves in queue (don't clear completed moves)
-    moveQueue.abort("Movement interrupted")
     gameContext.currentMove = null
   },
 }
@@ -250,12 +248,12 @@ async function smoothMove(direction) {
         ? Math.abs(currentPixelY - targetPixelY)
         : Math.abs(currentPixelX - targetPixelX)
 
-    if (distanceToTarget <= offset) {
+    if (distanceToTarget <= myBomber.speed) {
       clearInterval(gameContext.moveIntervalId)
       gameContext.moveIntervalId = null
       handleMoveComplete()
     } else {
-      sendMoveCommand(direction, "normal")
+      sendMoveCommand(direction, socket)
     }
   }, STEP_DELAY)
 }
@@ -537,7 +535,7 @@ function handleManualMove(direction, useSmoothMove) {
   } else {
     // Send direct single-step move command
     console.log(`   👣 Sending single step: ${direction}`)
-    sendMoveCommand(direction)
+    sendMoveCommand(direction, socket)
   }
 }
 

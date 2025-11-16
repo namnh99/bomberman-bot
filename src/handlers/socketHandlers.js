@@ -13,7 +13,6 @@ import {
   getBomber,
   isBomberOnBombTile,
 } from "../helpers/gameState.js"
-import { moveQueue } from "../helpers/moveQueue.js"
 
 /**
  * Register all socket event handlers
@@ -32,9 +31,6 @@ export function registerSocketHandlers(
     console.log("✅ Connected:", socket.id)
     socket.emit("join", {})
     gameContext.myUid = socket.id
-
-    // Initialize move queue with socket
-    moveQueue.init(socket)
 
     onSetupManualControl()
   })
@@ -81,38 +77,11 @@ export function registerSocketHandlers(
 
     // Update bomber's position in state
     updateBomberPosition(gameContext.currentState, data.uid, data.x, data.y)
-
-    // Confirm move if this is our bomber
-    if (data.uid === gameContext.myUid) {
-      moveQueue.confirmMove()
-
-      // Log queue status periodically
-      const status = moveQueue.getStatus()
-      // if (status.totalMoves % 10 === 0) {
-      //   console.log(
-      //     `   📊 Move Queue Stats: ${status.confirmedMoves}/${status.totalMoves} (${status.successRate}) | Queue: ${status.queueSize}`,
-      //   )
-      // }
-    }
   })
 
   // New bomb handler
   socket.on("new_bomb", (bomb) => {
     if (!gameContext.currentState) return
-
-    // const now = Date.now()
-    // console.log(`\n💣 NEW BOMB DEBUG:`)
-    // console.log(`   ID: ${bomb.id}`)
-    // console.log(
-    //   `   Position: [${Math.floor(bomb.x / GRID_SIZE)}, ${Math.floor(bomb.y / GRID_SIZE)}]`,
-    // )
-    // console.log(`   Owner UID: ${bomb.uid}`)
-    // console.log(`   Created At (server): ${bomb.createdAt}`)
-    // console.log(`   Life Time (server): ${bomb.lifeTime}`)
-    // console.log(`   Client Time (now): ${now}`)
-    // console.log(`   Time Diff: ${now - bomb.createdAt}ms`)
-    // console.log(`   Will explode in: ${bomb.lifeTime - (now - bomb.createdAt)}ms`)
-    // console.log(`   Full bomb object:`, JSON.stringify(bomb, null, 2))
 
     const myBomber = getBomber(gameContext.currentState, gameContext.myUid)
     const { gridX, gridY } = getBombWithGrid(bomb)
@@ -129,7 +98,6 @@ export function registerSocketHandlers(
     addBomb(gameContext.currentState, bomb)
 
     if (bomb.uid !== gameContext.myUid) {
-      // CRITICAL: Check if new bomb affects our paths
       handleNewBombDuringPath(gameContext, pathModeManager, manualControlManager, onMakeDecision)
     }
   })
