@@ -1243,8 +1243,21 @@ export function decideNextAction(state, myUid) {
               )
               const distance = Math.abs(adjX - player.x) + Math.abs(adjY - player.y)
 
-              // Calculate priority score: balance between chest count and distance
-              const priorityScore = chestCount.count - distance * 2
+              // EARLY GAME: Prioritize chest count heavily (destroy multiple chests > close distance)
+              // LATER GAME: Balance chest count and distance more evenly
+              const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
+              let priorityScore
+              if (isEarlyWithManyChests) {
+                // Early game: chest count is 10x more important than distance
+                // Example: 3 chests at distance 5 = 30 - 5 = 25
+                // Example: 2 chests at distance 1 = 20 - 1 = 19
+                priorityScore = chestCount.count * 10 - distance
+              } else {
+                // Later game: balance chest count and distance
+                // Example: 3 chests at distance 5 = 3 - 10 = -7
+                // Example: 2 chests at distance 1 = 2 - 2 = 0
+                priorityScore = chestCount.count - distance * 2
+              }
 
               positionScores.set(key, chestCount.count)
               adjacentTargetsWithScore.push({
@@ -1266,9 +1279,14 @@ export function decideNextAction(state, myUid) {
 
     console.log(`   Adjacent chest targets: ${adjacentTargetsWithScore.length}`)
     if (adjacentTargetsWithScore.length > 0) {
+      const best = adjacentTargetsWithScore[0]
+      const isEarlyWithManyChests = gamePhase === "EARLY" && allChests.length > 5
       console.log(
-        `   Best position would destroy ${adjacentTargetsWithScore[0].chestCount} chest(s)`,
+        `   Best position would destroy ${best.chestCount} chest(s) at distance ${best.distance} (score: ${best.priorityScore.toFixed(1)})`,
       )
+      if (isEarlyWithManyChests) {
+        console.log(`   🎯 EARLY GAME MODE: Prioritizing chest count (10x) over distance`)
+      }
     }
 
     if (adjacentTargetsWithScore.length) {
